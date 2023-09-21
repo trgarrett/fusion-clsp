@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fusion-clsp"
+version = "1.0.0b1"
+authors = [
+  { name="Tim Garrett", email="trg83@yahoo.com" },
+]
+description = "Fusion for Monkeyzoo Chialisp and Python Drivers"
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+]
+
+[tool.hatch.build]
+include = [
+  "clsp/*.*",
+  "fusion/*.*",
+  "README.md"
+]
