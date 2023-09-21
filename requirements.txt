@@ -2,4 +2,5 @@ pytest
 pytest_asyncio
 pytest-env
 
+blspy
 chia-blockchain >= 2.0.1

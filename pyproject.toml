@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fusion-clsp"
-version = "1.0.0b1"
+version = "1.0.0b2"
 authors = [
   { name="Tim Garrett", email="trg83@yahoo.com" },
 ]
