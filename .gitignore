@@ -1,2 +1,6 @@
 venv
 __pychache__
+*/__pycache__
+offer.txt
+offer.json
+spend.json
