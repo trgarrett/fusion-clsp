@@ -4,6 +4,20 @@ This is the Fusion contract (created for Monkeyzoo).
 
 This Chialisp code base allows upgrading (fusing) and downgrading (defusing) NFTs with related NFTs. 
 
+# Quick start
+
+* Start chia simulator
+*   `chia dev sim start`
+* Customize pytest.ini for your environment
+* Get your venv ready
+
+```
+python3 -m venv venv
+. venv/bin/activate
+pip install -r requirements.txt
+pytest
+```
+
 # Terminology
 
 - NFT A: by convention, the "house" NFT which must be offered and locked first. The concept is that an upgrade lacks meaningful provenance until it has been owned, so the "house" risks the least by locking the NFT up for upgrade.
