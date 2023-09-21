@@ -1,0 +1,68 @@
+(
+  ; the ultimate util
+  (include curry.clib)
+
+  ; sha256
+  (include sha256tree.clib)
+
+  (defconstant b32 32)
+
+  (defun-inline size_b32 (var)
+    (= (strlen var) b32)
+  )
+
+  (defun calculate_coin_id (parent puzzlehash amount)
+    (if (all (size_b32 parent) (size_b32 puzzlehash) (> amount -1))
+      (sha256 parent puzzlehash amount)
+      (x)
+    )
+  )
+
+  ;;;
+  ; Calculate a naive (and super verbose) lineage proof
+  ;;;
+  (defun calculate_coin_id_from_lineage_proof (lineage_proof)
+    (if (l lineage_proof)
+        (if (all (f lineage_proof) (r lineage_proof))
+          ; two or more items
+          (if (l (r (r lineage_proof)))
+            ; more than two
+            (calculate_coin_id_from_lineage_proof (c (calculate_coin_id (f lineage_proof) (f (r lineage_proof)) 1) (r (r lineage_proof))))
+            ; two
+            (calculate_coin_id (f lineage_proof) (f (r lineage_proof)) 1)
+          )
+          ; one item list
+          (f lineage_proof)
+        )
+        ; error condition or misuse of the function
+        (x)
+    )
+  )
+
+  ;; return the full puzzlehash for a singleton with the innerpuzzle curried in
+  (defun-inline calculate_full_puzzle_hash (singleton_mod_hash launcher_id launcher_puzzle_hash inner_puzzle_hash)
+      (curry_hashes_inline singleton_mod_hash
+      ; calculate the singleton struct
+      (sha256 2
+        (sha256 1 singleton_mod_hash)
+        (sha256 2
+          (sha256 1 launcher_id)
+          (sha256 1 launcher_puzzle_hash)
+        )
+      )
+      inner_puzzle_hash
+    )
+  )  
+
+  ;; 
+  ;;; given two lists of the same size, return a list of pairs ((l1[0] . l2[0]) ... (l1[n] . l2[n]))
+  (defun list_of_pairs (l1 l2)
+      (if (all (l l1) (l l2))
+          ; a list remains
+          (c (list (f l1) (f l2)) (list_of_pairs (r l1) (r l2)))
+          ; end
+          ()
+      )
+  )
+
+)
