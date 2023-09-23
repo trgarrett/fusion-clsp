@@ -90,18 +90,23 @@ class TestNftUpgrade:
 
             did_one_id, _ = await fusion.create_did()
             did_two_id, _ = await fusion.create_did()
+            did_three_id, _ = await fusion.create_did()
 
             # make simulated NFTs and send to primary address of wallet
             primary_puzzlehash = decode_puzzle_hash(PRIMARY_ADDRESS)
 
             nft_a_launcher_id = await fusion.mint_nft(did_one_id, primary_puzzlehash, 'A')
             nft_a_coin_record = await fusion.wait_for_coin_record(nft_a_launcher_id)
-            nft_b_launcher_id = await fusion.mint_nft(did_two_id, primary_puzzlehash, 'B')
+            nft_b1_launcher_id = await fusion.mint_nft(did_two_id, primary_puzzlehash, 'B1')
+            nft_b2_launcher_id = await fusion.mint_nft(did_three_id, primary_puzzlehash, 'B2')
             
             nft_a_coin_record: CoinRecord = await fusion.wait_for_coin_record(nft_a_launcher_id)
-            nft_b_coin_record: CoinRecord = await fusion.wait_for_coin_record(nft_b_launcher_id)
+            nft_b1_coin_record: CoinRecord = await fusion.wait_for_coin_record(nft_b1_launcher_id)
+            nft_b2_coin_record: CoinRecord = await fusion.wait_for_coin_record(nft_b2_launcher_id)
 
-            singleton_launcher_id = await fusion.cli_deploy_singleton(encode_puzzle_hash(nft_a_launcher_id, "nft"), encode_puzzle_hash(nft_b_launcher_id, "nft"))
+            singleton_launcher_id = await fusion.cli_deploy_singleton(encode_puzzle_hash(nft_a_launcher_id, "nft"),
+                                                                      encode_puzzle_hash(nft_b1_launcher_id, "nft") + ","
+                                                                      + encode_puzzle_hash(nft_b2_launcher_id, "nft"))
             assert singleton_launcher_id is not None
 
             p2_singleton = fusion.pay_to_singleton_puzzle(singleton_launcher_id)
@@ -124,7 +129,10 @@ class TestNftUpgrade:
             nft_a_coin_id = nft_a_coin_record.coin.name()
             logger.debug(f"After locking A into p2, (coin id {nft_a_coin_id.hex()})")
 
-            offer: Offer = await self.make_offer_b_for_a(fusion, nft_a_launcher_id, nft_a_coin_record, nft_b_launcher_id, nft_b_coin_record, primary_puzzlehash)
+            offer: Offer = await self.make_offer_b_for_a(fusion, nft_a_launcher_id,
+                                                         [(nft_b1_launcher_id, nft_b1_coin_record),
+                                                          (nft_b2_launcher_id, nft_b2_coin_record)],
+                                                          primary_puzzlehash)
             logger.info(f"Offer\n\t{offer.to_bech32()}")
 
             await fusion.swap(singleton_launcher_id, offer.to_bech32())
@@ -134,25 +142,40 @@ class TestNftUpgrade:
             a_full_puzzle = await fusion.full_puzzle_for_p2_puzzle(nft_a_launcher_id, a_p2_puzzle)
             assert a_coin_record.coin.puzzle_hash.hex() == a_full_puzzle.get_tree_hash().hex()
 
-            b_coin_record = await fusion.find_unspent_descendant(await node_client.get_coin_record_by_name(nft_b_launcher_id))
-            b_puzzle = await fusion.full_puzzle_for_p2_puzzle(nft_b_launcher_id, p2_singleton)
-            assert b_coin_record.coin.puzzle_hash.hex() == b_puzzle.get_tree_hash().hex()
+            nft_b1_coin_record = await fusion.find_unspent_descendant(await node_client.get_coin_record_by_name(nft_b1_launcher_id))
+            b1_puzzle = await fusion.full_puzzle_for_p2_puzzle(nft_b1_launcher_id, p2_singleton)
+            assert nft_b1_coin_record.coin.puzzle_hash.hex() == b1_puzzle.get_tree_hash().hex()
+
+            nft_b2_coin_record = await fusion.find_unspent_descendant(await node_client.get_coin_record_by_name(nft_b2_launcher_id))
+            b2_puzzle = await fusion.full_puzzle_for_p2_puzzle(nft_b2_launcher_id, p2_singleton)
+            assert nft_b2_coin_record.coin.puzzle_hash.hex() == b2_puzzle.get_tree_hash().hex()
+
         finally:
             # clean up connections
             await fusion.close()
 
 
-    async def make_offer_b_for_a(self, fusion, nft_a_launcher_id: bytes32, nft_a_coin_record: CoinRecord, 
-                                 nft_b_launcher_id: bytes32, nft_b_coin_record: CoinRecord, nft_next_puzzlehash: bytes32) -> Offer:
+    async def make_offer_b_for_a(self, fusion, nft_a_launcher_id: bytes32,
+                                 b_coins: List[Tuple[bytes32, CoinRecord]],
+                                 nft_next_puzzlehash: bytes32) -> Offer:
         driver_dict: Dict[bytes32, PuzzleInfo] = {}
         driver_dict[nft_a_launcher_id] = await self.get_puzzle_info(fusion, nft_a_launcher_id)
-        driver_dict[nft_b_launcher_id] = await self.get_puzzle_info(fusion, nft_b_launcher_id)
+
+        nft_b1_launcher_id = b_coins[0][0]
+        nft_b1_coin_record = b_coins[0][1]
+        nft_b2_launcher_id = b_coins[1][0]
+        nft_b2_coin_record = b_coins[1][1]
+        driver_dict[nft_b1_launcher_id] = await self.get_puzzle_info(fusion, nft_b1_launcher_id)
+        driver_dict[nft_b2_launcher_id] = await self.get_puzzle_info(fusion, nft_b2_launcher_id)
 
         requested_payments: Dict[Optional[bytes32], List[NotarizedPayment]] = {}
         requested_payments[nft_a_launcher_id] = [Payment(nft_next_puzzlehash, 1, [nft_next_puzzlehash])]
 
-        notarized_payments = Offer.notarize_payments(requested_payments, [nft_b_coin_record.coin])
-        spend_bundle, _ = await fusion.make_transfer_nft_spend_bundle(nft_b_launcher_id, OFFER_MOD_HASH)
+        notarized_payments = Offer.notarize_payments(requested_payments, [nft_b1_coin_record.coin, nft_b2_coin_record.coin])
+        spend_bundle_b1, _ = await fusion.make_transfer_nft_spend_bundle(nft_b1_launcher_id, OFFER_MOD_HASH)
+        spend_bundle_b2, _ = await fusion.make_transfer_nft_spend_bundle(nft_b2_launcher_id, OFFER_MOD_HASH)
+
+        spend_bundle: SpendBundle = SpendBundle.aggregate([spend_bundle_b1, spend_bundle_b2])
 
         offer: Offer = Offer(notarized_payments, spend_bundle, driver_dict)
         return offer
