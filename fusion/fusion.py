@@ -435,7 +435,7 @@ class Fusion:
     async def create_offer_a_for_b_as_spend_bundle(self, nonce: bytes32, p2_singleton: Program,
                                                    a_launcher_ids: List[bytes32], b_launcher_ids: List[bytes32],
                                                    singleton_launcher_id, singleton_coin_id: bytes32, singleton_inner_puzzle: Program,
-                                                   nft_next_puzzlehashes, offer_launcher_ids_to_inner_puzzlehashes: Dict[bytes32, bytes32],
+                                                   nft_next_puzzlehashes: List[bytes32], offer_launcher_ids_to_inner_puzzlehashes: Dict[bytes32, bytes32],
                                                    wallet_offers_to_assert: List[Tuple[bytes32, bytes32]]) -> SpendBundle:
         spend_bundles = []
 
@@ -686,7 +686,7 @@ class Fusion:
 
         logger.info(f"OFFER_MOD: {OFFER_MOD_HASH.hex()}")
 
-        nft_next_puzzlehash: bytes32 = None
+        nft_next_puzzlehashes: List[bytes32] = []
 
         offer: Offer = Offer.from_bech32(offer)
 
@@ -695,12 +695,11 @@ class Fusion:
         for _, payments in offer.requested_payments.items():
             nonce = payments[0].nonce
             for p in payments:
-                # FIXME ? maybe - assumes all offer returns go to one address
-                if nft_next_puzzlehash is None:
-                    nft_next_puzzlehash = p.memos[0]
-                    logger.info(f"Found nft_next_puzzlehash: {nft_next_puzzlehash.hex()}")
-                else:
-                    logger.error(f"Found additional nft_next_puzzlehash: {p.puzzle_hash.hex()}. This will break assertions!!")
+                # assumption here is that offer requests NFTs in the same order as the singleton is curried.
+                # If this doesn't hold, we'll need to modify the driver
+                nft_next_puzzlehash = p.memos[0]
+                nft_next_puzzlehashes.append(nft_next_puzzlehash)
+                logger.info(f"Found nft_next_puzzlehash: {nft_next_puzzlehash.hex()}")
 
                 msg: bytes32 = Program.to((p.nonce, [p.as_condition_args() for p in payments])).get_tree_hash()
                 logger.info(f"Announcement msg (not combined with puzzle): {msg.hex()}")
