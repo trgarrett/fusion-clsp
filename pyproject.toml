@@ -4,11 +4,12 @@ build-backend = "hatchling.build"
 
 [project]
 dependencies=[
+  'blspy == 2.0.2',
   'chia-blockchain == 2.0.1',
-  'blspy == 2.0.2'
+  'chia_rs == 0.2.10',
 ]
 name = "fusion-clsp"
-version = "1.0.0b4"
+version = "1.0.0b5"
 authors = [
   { name="Tim Garrett", email="trg83@yahoo.com" },
 ]
