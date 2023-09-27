@@ -31,8 +31,8 @@
 
   (defun-inline base_conditions (singleton_coin_id SINGLETON_MOD_HASH LAUNCHER_ID LAUNCHER_PUZZLE_HASH singleton_inner_puzzlehash) 
     (list
-      ; block ephemeral spends
-      (list ASSERT_HEIGHT_RELATIVE 1)
+      ;;; FIXME - this seems helpful to block ephemeral spends but is problematic in practice...
+      ;;;(list ASSERT_HEIGHT_RELATIVE 1)
 
       ; who am I?
       (list ASSERT_MY_COIN_ID singleton_coin_id)

@@ -137,10 +137,20 @@ class TestNftUpgrade:
 
             await fusion.swap(singleton_launcher_id, offer.to_bech32())
 
-            a_coin_record = await fusion.find_unspent_descendant(await node_client.get_coin_record_by_name(nft_a_launcher_id))
+            # make sure first swap is visible on chain
+            logger.info("Waiting for swapped coins to show as moved on chain")
+            logger.info("A...")
+            await self.wait_for_coin_spent(fusion.node_client, nft_a_coin_record.coin.name())
+            logger.info("B1...")
+            await self.wait_for_coin_spent(fusion.node_client, nft_b1_coin_record.coin.name())
+            logger.info("B2...")
+            await self.wait_for_coin_spent(fusion.node_client, nft_b2_coin_record.coin.name())
+            logger.info("Swapped on chain.")
+
+            nft_a_coin_record = await fusion.find_unspent_descendant(await node_client.get_coin_record_by_name(nft_a_launcher_id))
             a_p2_puzzle = puzzle_for_pk(wallet_keys[0].get_g1())
             a_full_puzzle = await fusion.full_puzzle_for_p2_puzzle(nft_a_launcher_id, a_p2_puzzle)
-            assert a_coin_record.coin.puzzle_hash.hex() == a_full_puzzle.get_tree_hash().hex()
+            assert nft_a_coin_record.coin.puzzle_hash.hex() == a_full_puzzle.get_tree_hash().hex()
 
             nft_b1_coin_record = await fusion.find_unspent_descendant(await node_client.get_coin_record_by_name(nft_b1_launcher_id))
             b1_puzzle = await fusion.full_puzzle_for_p2_puzzle(nft_b1_launcher_id, p2_singleton)
@@ -149,6 +159,44 @@ class TestNftUpgrade:
             nft_b2_coin_record = await fusion.find_unspent_descendant(await node_client.get_coin_record_by_name(nft_b2_launcher_id))
             b2_puzzle = await fusion.full_puzzle_for_p2_puzzle(nft_b2_launcher_id, p2_singleton)
             assert nft_b2_coin_record.coin.puzzle_hash.hex() == b2_puzzle.get_tree_hash().hex()
+
+            # complete the roundtrip by defusing and trading A back for B1 and B2
+            logger.info("Beginning defusion flow...")
+
+            offer: Offer = await self.make_offer_a_for_b(fusion, nft_a_launcher_id, nft_a_coin_record,
+                                                         [(nft_b1_launcher_id, nft_b1_coin_record),
+                                                          (nft_b2_launcher_id, nft_b2_coin_record)],
+                                                          primary_puzzlehash)
+            logger.info(f"Offer\n\t{offer.to_bech32()}")
+
+            await fusion.swap(singleton_launcher_id, offer.to_bech32())
+
+            logger.info("Waiting for swapped coins to show as moved on chain (defusion!)")
+            logger.info(f"A...{nft_a_coin_record.coin.name().hex()}")
+            await self.wait_for_coin_spent(fusion.node_client, nft_a_coin_record.coin.name())
+            logger.info(f"B1...{nft_b1_coin_record.coin.name().hex()}")
+            await self.wait_for_coin_spent(fusion.node_client, nft_b1_coin_record.coin.name())
+            logger.info(f"B2...{nft_b2_coin_record.coin.name().hex()}")
+            await self.wait_for_coin_spent(fusion.node_client, nft_b2_coin_record.coin.name())
+            logger.info("Swapped on chain.")
+
+            # assert everything ends up in the right spot
+            # A locked into p2_singleton
+            nft_a_coin_record = await fusion.find_unspent_descendant(await node_client.get_coin_record_by_name(nft_a_launcher_id))
+            a_puzzle = await fusion.full_puzzle_for_p2_puzzle(nft_a_launcher_id, p2_singleton)
+            assert nft_a_coin_record.coin.puzzle_hash.hex() == a_puzzle.get_tree_hash().hex()
+
+            # B1 back to user wallet
+            nft_b1_coin_record = await fusion.find_unspent_descendant(await node_client.get_coin_record_by_name(nft_b1_launcher_id))
+            b1_puzzle = puzzle_for_pk(wallet_keys[0].get_g1())
+            b1_full_puzzle = await fusion.full_puzzle_for_p2_puzzle(nft_b1_launcher_id, b1_puzzle)
+            assert nft_b1_coin_record.coin.puzzle_hash.hex() == b1_full_puzzle.get_tree_hash().hex()
+
+            # B2 back to user wallet
+            nft_b2_coin_record = await fusion.find_unspent_descendant(await node_client.get_coin_record_by_name(nft_b2_launcher_id))
+            b2_puzzle = puzzle_for_pk(wallet_keys[0].get_g1())
+            b2_full_puzzle = await fusion.full_puzzle_for_p2_puzzle(nft_b2_launcher_id, b2_puzzle)
+            assert nft_b2_coin_record.coin.puzzle_hash.hex() == b2_full_puzzle.get_tree_hash().hex()
 
         finally:
             # clean up connections
@@ -178,6 +226,29 @@ class TestNftUpgrade:
         spend_bundle: SpendBundle = SpendBundle.aggregate([spend_bundle_b1, spend_bundle_b2])
 
         offer: Offer = Offer(notarized_payments, spend_bundle, driver_dict)
+        return offer
+    
+
+    async def make_offer_a_for_b(self, fusion, nft_a_launcher_id: bytes32, nft_a_coin_record: CoinRecord,
+                                 b_coins: List[Tuple[bytes32, CoinRecord]],
+                                 nft_next_puzzlehash: bytes32) -> Offer:
+        driver_dict: Dict[bytes32, PuzzleInfo] = {}
+        driver_dict[nft_a_launcher_id] = await self.get_puzzle_info(fusion, nft_a_launcher_id)
+
+        nft_b1_launcher_id = b_coins[0][0]
+        nft_b2_launcher_id = b_coins[1][0]
+
+        driver_dict[nft_b1_launcher_id] = await self.get_puzzle_info(fusion, nft_b1_launcher_id)
+        driver_dict[nft_b2_launcher_id] = await self.get_puzzle_info(fusion, nft_b2_launcher_id)
+
+        requested_payments: Dict[Optional[bytes32], List[NotarizedPayment]] = {}
+        requested_payments[nft_b1_launcher_id] = [Payment(nft_next_puzzlehash, 1, [nft_next_puzzlehash])]
+        requested_payments[nft_b2_launcher_id] = [Payment(nft_next_puzzlehash, 1, [nft_next_puzzlehash])]
+
+        notarized_payments = Offer.notarize_payments(requested_payments, [nft_a_coin_record.coin])
+        spend_bundle_a, _ = await fusion.make_transfer_nft_spend_bundle(nft_a_launcher_id, OFFER_MOD_HASH)
+
+        offer: Offer = Offer(notarized_payments, spend_bundle_a, driver_dict)
         return offer
 
 
