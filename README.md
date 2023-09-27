@@ -51,7 +51,7 @@ chia wallet nft transfer -i 80 -ni nft1r8amznu42w0eg2tlws9wzz6heh9gfwlermkzem8vc
 
 * Offer 'B' for 'A' - Fusion
 
-### Note: for offer.txt contents, you can use `cat offer.txt` but Markdown doesn't like that embedded within a code block!
+Note: for offer.txt contents, you can use <BACKTICK>cat offer.txt<BACKTICK> but Markdown doesn't like that embedded within a code block!
 
 ```
 chia wallet make_offer -o nft1gxsfkvff3dazw5xdeadv4eft948xs7dkdgj2zjfkxt5aptlnhraql96fwh:1 -r nft1r8amznu42w0eg2tlws9wzz6heh9gfwlermkzem8vc7a20zlzfnyq3w6hdj:1 -p offer.txt
@@ -60,8 +60,10 @@ PREFIX=txch FINGERPRINT=1307711849 python3 -m fusion.fusion swap 0xbd3afcbef8840
 
 * Offer 'A' for 'B' - Defusion
 
+```
 chia wallet make_offer -r nft1gxsfkvff3dazw5xdeadv4eft948xs7dkdgj2zjfkxt5aptlnhraql96fwh:1 -o nft1r8amznu42w0eg2tlws9wzz6heh9gfwlermkzem8vc7a20zlzfnyq3w6hdj:1 -p offer.txt
 PREFIX=txch FINGERPRINT=1307711849 python3 -m fusion.fusion swap 0xbd3afcbef8840914af867f6c790777f25826b37635bc5a6a831049ae82191cb8 <offer.txt contents>
+```
 
 
 # Terminology
