@@ -4,7 +4,7 @@ This is the Fusion contract (created for Monkeyzoo).
 
 This Chialisp code base allows upgrading (fusing) and downgrading (defusing) NFTs with related NFTs. 
 
-# Quick start
+# Development Quick Start
 
 * Start chia simulator
 *   `chia dev sim start`
@@ -17,6 +17,36 @@ python3 -m venv venv
 pip install -r requirements.txt
 pytest
 ```
+
+# CLI Quick Start
+
+## All values below are specific to your environment. Particularly for mainnet, please make sure you are doing what you think you are doing!
+
+* Prep your CHIA_ROOT to talk to the network of your choice (simulator, testnet, mainnet)
+* Mint a couple of test NFTs
+
+  For mainnet, omit the prefix or specify as XCH.
+
+  ```
+  PREFIX=txch FINGERPRINT=<WALLET_FINGERPINT> python3 -m fusion.fusion mint 2
+  ```
+
+* Deploy a singleton (smart coin) for your newly minted NFT IDs
+
+```
+PREFIX=txch FINGERPRINT=1307711849 python3 -m fusion.fusion deploy nft1r8amznu42w0eg2tlws9wzz6heh9gfwlermkzem8vc7a20zlzfnyq3w6hdj nft1gxsfkvff3dazw5xdeadv4eft948xs7dkdgj2zjfkxt5aptlnhraql96fwh
+```
+
+* Read back the singleton (smart coin) details to make sure it matches your expectation (use launcher_id from last output)
+
+```
+PREFIX=txch FINGERPRINT=1307711849 python3 -m fusion.fusion check 0xbd3afcbef8840914af867f6c790777f25826b37635bc5a6a831049ae82191cb8
+```
+
+* Send your 'A' NFT to the p2_singleton_address (as specified in last output). '-i' will be the wallet ID offset that holds your NFT ID, and is specific to your wallet and NFT
+
+chia wallet nft transfer -i 80 -ni nft1r8amznu42w0eg2tlws9wzz6heh9gfwlermkzem8vc7a20zlzfnyq3w6hdj -ta txch1g5v3j77gkef07js8enrqp57g93st0gm5rm5zvhf2rjvz8l6lswws9cs2cm
+
 
 # Terminology
 
