@@ -160,6 +160,9 @@ class TestNftUpgrade:
             b2_puzzle = await fusion.full_puzzle_for_p2_puzzle(nft_b2_launcher_id, p2_singleton)
             assert nft_b2_coin_record.coin.puzzle_hash.hex() == b2_puzzle.get_tree_hash().hex()
 
+            # make sure last swap is completely visible on chain
+            await farm_block(fusion.wallet_client)
+
             # complete the roundtrip by defusing and trading A back for B1 and B2
             logger.info("Beginning defusion flow...")
 
@@ -297,9 +300,7 @@ class TestNftUpgrade:
 
 async def farm_block(wallet_client, count=1):
     logger.info(f"Farming {count} block(s)...")
-    await wallet_synced(wallet_client)
-    for i in range(count):
-        await wallet_client.farm_block(PRIMARY_ADDRESS)
+    subprocess.run(["chia", "dev", "sim", "farm", "-b", f"{count}"])
     await wallet_synced(wallet_client)
 
 
