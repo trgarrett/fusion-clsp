@@ -53,8 +53,7 @@ logger = logging.getLogger()
 
 ##################################################################################################################
 # NOTE: use one you have in your local simulator here!
-FINGERPRINT = 1307711849
-PRIMARY_ADDRESS = "txch12pfws6enm2jeqjt03pspqg6sjh50g86hl9xm24dx4cwwm2l88nmqwy99nd"
+FINGERPRINT = int(os.environ.get('FINGERPRINT'))
 ##################################################################################################################
 
 
@@ -93,7 +92,9 @@ class TestNftUpgrade:
             did_three_id, _ = await fusion.create_did()
 
             # make simulated NFTs and send to primary address of wallet
-            primary_puzzlehash = decode_puzzle_hash(PRIMARY_ADDRESS)
+            primary_puzzle = puzzle_for_pk(wallet_keys[0].get_g1())
+            primary_puzzlehash = primary_puzzle.get_tree_hash()
+            primary_address = encode_puzzle_hash(primary_puzzlehash, prefix)
 
             nft_a_launcher_id = await fusion.mint_nft(did_one_id, primary_puzzlehash, 'A')
             nft_a_coin_record = await fusion.wait_for_coin_record(nft_a_launcher_id)
@@ -114,7 +115,7 @@ class TestNftUpgrade:
 
             # troubleshooting...
             logger.info(f"offer mod hash: {OFFER_MOD_HASH}")
-            logger.info(f"primary address/puzzlehash: {PRIMARY_ADDRESS} / {primary_puzzlehash.hex()}")
+            logger.info(f"primary address/puzzlehash: {primary_address} / {primary_puzzlehash.hex()}")
             logger.info(f"SINGLETON_MOD_HASH: {SINGLETON_MOD_HASH}")
             logger.info(f"SINGLETON_LAUNCHER_HASH: {SINGLETON_LAUNCHER_HASH}")
 
