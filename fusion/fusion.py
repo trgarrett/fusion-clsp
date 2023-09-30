@@ -356,11 +356,10 @@ class Fusion:
         parent_inner_puzzlehash = unft.nft_state_layer.get_tree_hash()
 
         assert unft is not None, "Could not find uncurried NFT"
-        assert unft.transfer_program_curry_params is not None, "Could not find transfer program curry params"
 
         innersol = None
 
-        if unft is not None and unft.transfer_program_curry_params:
+        if unft is not None:
             nft_inner_puzzle: Program = await self.nft_inner_puzzle(nft_launcher_id, p2_puzzle)
 
             nft_singleton_inner_puzzle = create_nft_layer_puzzle_with_curry_params(unft.metadata, unft.metadata_updater_hash, nft_inner_puzzle)
@@ -372,8 +371,6 @@ class Fusion:
                                     nft_singleton_inner_puzzle.get_tree_hash(), recipient_puzzlehash])
             innersol = p2_solution
 
-            nft_puzzle_hash = bytes32.from_bytes(unft.transfer_program_curry_params.as_python()[0][1])
-            logger.info(f"{nft_puzzle_hash.hex()} -> {encode_puzzle_hash(nft_puzzle_hash, 'nft')}")
             lineage_proof = LineageProof(parent_coin_record.coin.parent_coin_info, parent_inner_puzzlehash, 1)
             magic_condition = None
             if unft.supports_did:
@@ -413,9 +410,6 @@ class Fusion:
 
         notarized_payment = (nonce, [[recipient_puzzlehash, 1, [recipient_puzzlehash]]])
         innersol = Program.to([notarized_payment])
-
-        nft_puzzle_hash = bytes32.from_bytes(unft.transfer_program_curry_params.as_python()[0][1])
-        logger.info(f"{nft_puzzle_hash.hex()} -> {encode_puzzle_hash(nft_puzzle_hash, 'nft')}")
 
         lineage_proof = lineage_proof_for_coinsol(parent_coin_spend)
 
