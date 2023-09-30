@@ -304,8 +304,6 @@ class Fusion:
         )
         
         if unft is not None:
-            nft_puzzle_hash = bytes32.from_bytes(unft.transfer_program_curry_params.as_python()[0][1])
-            logger.info(f"{nft_puzzle_hash.hex()} -> {encode_puzzle_hash(nft_puzzle_hash, 'nft')}")
             lineage_proof = LineageProof(parent_coin_record.coin.parent_coin_info, parent_inner_puzzlehash, 1)
             magic_condition = None
             if unft.supports_did:
