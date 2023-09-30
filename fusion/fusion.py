@@ -355,6 +355,9 @@ class Fusion:
         unft = UncurriedNFT.uncurry(*nft_program.uncurry())
         parent_inner_puzzlehash = unft.nft_state_layer.get_tree_hash()
 
+        assert unft is not None, "Could not find uncurried NFT"
+        assert unft.transfer_program_curry_params is not None, "Could not find transfer program curry params"
+
         innersol = None
 
         if unft is not None and unft.transfer_program_curry_params:
