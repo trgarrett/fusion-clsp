@@ -136,6 +136,13 @@ class TestNftUpgrade:
                                                           primary_puzzlehash)
             logger.info(f"Offer\n\t{offer.to_bech32()}")
 
+            # test offer bundle - in general, this should do the same thing as the make_offer_b_for_a, but 
+            # the test only supports it going back to its primary puzzlehash, so we're not adopting it for now
+            offer_bundle_json: str = await fusion.make_offer_bundle_json(singleton_launcher_id, 'a', 1000)
+            logger.info(f"JSON bundle: {offer_bundle_json}")
+            assert offer_bundle_json is not None
+            assert json.loads(offer_bundle_json) is not None
+
             await fusion.swap(singleton_launcher_id, offer.to_bech32())
 
             # make sure first swap is visible on chain
@@ -257,33 +264,8 @@ class TestNftUpgrade:
 
 
     async def get_puzzle_info(self, fusion, coin_id: bytes32) -> PuzzleInfo:
-        driver_dict = {}
-        info = NFTInfo.from_json_dict((await fusion.wallet_client.get_nft_info(coin_id.hex()))["nft_info"])
-        id = info.launcher_id.hex()
-        assert isinstance(id, str)
-        driver_dict[id] = {
-            "type": "singleton",
-            "launcher_id": "0x" + id,
-            "launcher_ph": "0x" + info.launcher_puzhash.hex(),
-            "also": {
-                "type": "metadata",
-                "metadata": info.chain_info,
-                "updater_hash": "0x" + info.updater_puzhash.hex(),
-            },
-        }
-        if info.supports_did:
-            assert info.royalty_puzzle_hash is not None
-            assert info.royalty_percentage is not None
-            driver_dict[id]["also"]["also"] = {
-                "type": "ownership",
-                "owner": "0x" + info.owner_did.hex() if info.owner_did is not None else "()",
-                "transfer_program": {
-                    "type": "royalty transfer program",
-                    "launcher_id": "0x" + info.launcher_id.hex(),
-                    "royalty_address": "0x" + info.royalty_puzzle_hash.hex(),
-                    "royalty_percentage": str(info.royalty_percentage),
-                },
-            }
+        driver_dict = await fusion.get_driver_dict(coin_id)
+        id = coin_id.hex()
         return PuzzleInfo(driver_dict[id])
 
 

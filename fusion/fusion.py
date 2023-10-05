@@ -704,6 +704,72 @@ class Fusion:
         return nft_a_launcher_ids, nft_b_launcher_ids
 
 
+    async def make_offer_bundle_json(self, launcher_id: bytes32, a_or_b: str, fee: int=0) -> str:
+        payload: Dict = {}
+        offer_dict, driver_dict = await self.make_offer_bundle(launcher_id, a_or_b)
+        payload["offer"] = offer_dict
+        payload["driver_dict"] = driver_dict
+
+        if fee > 0:
+            payload["fee"] = fee
+
+        return json.dumps(payload)
+    
+
+    # a_or_b 'a'|'b' - which one is being requested
+    # returns - tuple of offer_dict, driver_dict
+    async def make_offer_bundle(self, launcher_id: bytes32, a_or_b: str) -> tuple[Dict, Dict]:
+        nft_a_launcher_ids, nft_b_launcher_ids = await self.get_nft_launcher_ids_from_extra_data(launcher_id)
+        offer_dict = {}
+        driver_dict = {}
+
+        a_factor = 1 if a_or_b == 'a' else -1
+        b_factor = 1 if a_or_b == 'b' else -1
+
+        for a in nft_a_launcher_ids:
+            offer_dict[a.hex()] = a_factor
+            a_driver = await self.get_driver_dict(a)
+            driver_dict.update(a_driver)
+
+        for b in nft_b_launcher_ids:
+            offer_dict[b.hex()] = b_factor
+            b_driver = await self.get_driver_dict(b)
+            driver_dict.update(b_driver)
+
+        return offer_dict, driver_dict
+    
+
+    async def get_driver_dict(self, coin_id: bytes32) -> Dict:
+        driver_dict = {}
+        info = NFTInfo.from_json_dict((await self.wallet_client.get_nft_info(coin_id.hex()))["nft_info"])
+        id = info.launcher_id.hex()
+        assert isinstance(id, str)
+        driver_dict[id] = {
+            "type": "singleton",
+            "launcher_id": "0x" + id,
+            "launcher_ph": "0x" + info.launcher_puzhash.hex(),
+            "also": {
+                "type": "metadata",
+                "metadata": info.chain_info,
+                "updater_hash": "0x" + info.updater_puzhash.hex(),
+            },
+        }
+        if info.supports_did:
+            assert info.royalty_puzzle_hash is not None
+            assert info.royalty_percentage is not None
+            driver_dict[id]["also"]["also"] = {
+                "type": "ownership",
+                "owner": "0x" + info.owner_did.hex() if info.owner_did is not None else "()",
+                "transfer_program": {
+                    "type": "royalty transfer program",
+                    "launcher_id": "0x" + info.launcher_id.hex(),
+                    "royalty_address": "0x" + info.royalty_puzzle_hash.hex(),
+                    "royalty_percentage": str(info.royalty_percentage),
+                },
+            }
+        return driver_dict
+
+
     async def swap(self, launcher_id: bytes32, offer: str):
         logger.info("******************************************************************************************************************")
         logger.info(f"Accepting offer at singleton: {launcher_id.hex()}")
