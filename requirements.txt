@@ -3,4 +3,4 @@ pytest_asyncio
 pytest-env
 
 blspy
-chia-blockchain==2.1.0
+chia-blockchain>=2.1.1

@@ -1,4 +1,4 @@
-[build-system]
+cbuild-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
@@ -10,7 +10,7 @@ dependencies=[
   'watchdog == 2.3.1',
 ]
 name = "fusion-clsp"
-version = "1.0.0rc6"
+version = "1.0.0rc7"
 authors = [
   { name="Tim Garrett", email="trg83@yahoo.com" },
 ]
