@@ -4,4 +4,3 @@ pytest-env
 
 blspy
 chia-blockchain==2.1.1
-watchdog==2.2.0
