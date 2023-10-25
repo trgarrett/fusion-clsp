@@ -43,7 +43,8 @@ from chia.wallet.puzzles.load_clvm import load_clvm
 from chia.wallet.puzzles.p2_delegated_puzzle_or_hidden_puzzle import (
     DEFAULT_HIDDEN_PUZZLE_HASH,
     calculate_synthetic_secret_key,
-    puzzle_for_pk
+    puzzle_for_pk,
+    puzzle_hash_for_synthetic_public_key,
 )
 from chia.wallet.puzzles.singleton_top_layer_v1_1 import (
     SINGLETON_LAUNCHER,
@@ -56,6 +57,7 @@ from chia.wallet.puzzles.singleton_top_layer_v1_1 import (
 from chia.wallet.sign_coin_spends import sign_coin_spends
 from chia.wallet.trading.offer import Offer, OFFER_MOD, OFFER_MOD_HASH, NotarizedPayment
 from chia.wallet.util.compute_memos import compute_memos_for_spend
+from chia.wallet.util.tx_config import CoinSelectionConfig, TXConfig
 from chia.wallet.wallet import Wallet
 
 INFINITE_COST = 11000000000
@@ -197,7 +199,9 @@ class Fusion:
 
             logger.info('Will sign launcher spend...')
 
-            full_spend = await sign_coin_spends([coin_a_spend, launcher_cs], wallet_keyf, AGG_SIG_ME_ADDITIONAL_DATA, MAX_BLOCK_COST_CLVM)
+            full_spend = await sign_coin_spends([coin_a_spend, launcher_cs], wallet_keyf, 
+                                                self.get_synthetic_private_key_for_puzzle_hash, 
+                                                AGG_SIG_ME_ADDITIONAL_DATA, MAX_BLOCK_COST_CLVM, [puzzle_hash_for_synthetic_public_key])
             status = await self.node_client.push_tx(full_spend)
             print_json(status)
 
@@ -217,6 +221,10 @@ class Fusion:
             logger.info(f'Failed on: {traceback.format_exc(e)}')
             logger.info('\r\n...Continuing to next coin')
 
+
+    async def get_synthetic_private_key_for_puzzle_hash(self, puzzle_hash: bytes32) -> Optional[PrivateKey]:
+        # TODO new API from upstream...implement if needed
+        return None
 
     def pay_to_singleton_puzzle(self, launcher_id: bytes32) -> Program:
         p2_curried: Program = P2_MOD.curry(SINGLETON_MOD_HASH, launcher_id, SINGLETON_LAUNCHER_HASH)
@@ -328,7 +336,10 @@ class Fusion:
             assert isinstance(lineage_proof, LineageProof)
             singleton_solution = Program.to([lineage_proof.to_program(), 1, nft_layer_solution])
             coin_spend = CoinSpend(coin_record.coin, full_puzzle, singleton_solution)
-            nft_spend_bundle = await sign_coin_spends([coin_spend], wallet_keyf, AGG_SIG_ME_ADDITIONAL_DATA, MAX_BLOCK_COST_CLVM)
+
+            nft_spend_bundle = await sign_coin_spends([coin_spend], wallet_keyf, 
+                                    self.get_synthetic_private_key_for_puzzle_hash, 
+                                    AGG_SIG_ME_ADDITIONAL_DATA, MAX_BLOCK_COST_CLVM, [puzzle_hash_for_synthetic_public_key])
 
             return nft_spend_bundle, inner_puzzle.get_tree_hash()
         else:
@@ -382,7 +393,10 @@ class Fusion:
             singleton_solution = Program.to([lineage_proof.to_program(), 1, nft_layer_solution])
 
             coin_spend = CoinSpend(coin_record.coin, full_puzzle, singleton_solution)
-            nft_spend_bundle = await sign_coin_spends([coin_spend], wallet_keyf, AGG_SIG_ME_ADDITIONAL_DATA, MAX_BLOCK_COST_CLVM)
+
+            nft_spend_bundle = await sign_coin_spends([coin_spend], wallet_keyf, 
+                        self.get_synthetic_private_key_for_puzzle_hash, 
+                        AGG_SIG_ME_ADDITIONAL_DATA, MAX_BLOCK_COST_CLVM, [puzzle_hash_for_synthetic_public_key])
 
             return nft_spend_bundle
 
@@ -423,7 +437,9 @@ class Fusion:
 
         coin_spend = CoinSpend(ephemeral_coin, full_puzzle, singleton_solution)
 
-        spend_bundle: SpendBundle = await sign_coin_spends([coin_spend], wallet_keyf, AGG_SIG_ME_ADDITIONAL_DATA, MAX_BLOCK_COST_CLVM)
+        spend_bundle = await sign_coin_spends([coin_spend], wallet_keyf,
+                                self.get_synthetic_private_key_for_puzzle_hash,
+                                AGG_SIG_ME_ADDITIONAL_DATA, MAX_BLOCK_COST_CLVM, [puzzle_hash_for_synthetic_public_key])
         return spend_bundle, nft_singleton_inner_puzzle.get_tree_hash()
 
 
@@ -548,7 +564,9 @@ class Fusion:
             SerializedProgram.from_program(full_solution)
         )
 
-        spend_bundle: SpendBundle = await sign_coin_spends([singleton_claim_coinsol], wallet_keyf, AGG_SIG_ME_ADDITIONAL_DATA, MAX_BLOCK_COST_CLVM)
+        spend_bundle = await sign_coin_spends([singleton_claim_coinsol], wallet_keyf, 
+                                self.get_synthetic_private_key_for_puzzle_hash, 
+                                AGG_SIG_ME_ADDITIONAL_DATA, MAX_BLOCK_COST_CLVM, [puzzle_hash_for_synthetic_public_key])
         return spend_bundle
 
  
@@ -662,12 +680,16 @@ class Fusion:
 
         data_hash_param = "0xD4584AD463139FA8C0D9F68F4B59F185"
         address = encode_puzzle_hash(recipient_puzzlehash, prefix=PREFIX)
+
+        tx_config = TXConfig(min_coin_amount=1, max_coin_amount=9999999999999, excluded_coin_amounts=[], excluded_coin_ids=[], reuse_puzhash=True)
+
         res = await wallet_client.mint_nft(
             wallet_id,
             address,
             address,
             data_hash_param,
             [f"https://example.com/img/{suffix}"],
+            tx_config=tx_config,
             did_id=did_id
         )
         assert res.get("success")
@@ -921,8 +943,8 @@ def puzzle_for_coin(coin: Coin) -> Program:
 
 async def select_coins(wallet_client: WalletRpcClient, amount: uint64):
     excluded_coins=list()
-    coins: List[Coin] = await wallet_client.select_coins(amount=amount, wallet_id=1, min_coin_amount=amount,
-                                                         excluded_coins=excluded_coins)
+    coin_selection_config = CoinSelectionConfig(min_coin_amount=1, max_coin_amount=9999999999999, excluded_coin_amounts=[], excluded_coin_ids=[])
+    coins: List[Coin] = await wallet_client.select_coins(amount=amount, wallet_id=1, coin_selection_config=coin_selection_config)
     logger.info(f'Selecting coins, will exclude {len(excluded_coins)} coins recently spent')
     assert len(coins) >= 1
     logger.info(f'Selected {len(coins)} coins')
