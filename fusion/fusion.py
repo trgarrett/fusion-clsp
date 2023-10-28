@@ -110,6 +110,11 @@ class Fusion:
 
 
     def load_keys(self, fingerprint: int):
+
+        if len(wallet_keys) > 0:
+            logger.info(f"Found {len(wallet_keys)} pre-loaded wallet keys, skipping")
+            return
+
         logger.info(f"Loading private key for spend bundle signing (fee support and private spends), fingerprint {fingerprint}")
         logger.info(f'Is keychain locked? {Keychain.is_keyring_locked()}')
         keychain = Keychain()
@@ -133,8 +138,6 @@ class Fusion:
         # TODO - could have a more elaborate default public key selection flow 
         # -- this assumes the first key found is always used for PUBKEY_A
         wallet_key = wallet_keys[0]
-        synth_key = calculate_synthetic_secret_key(wallet_key, DEFAULT_HIDDEN_PUZZLE_HASH)
-        self.pubkey_a = synth_key.get_g1()
 
 
     async def create_singleton_launcher(self) -> Coin:
