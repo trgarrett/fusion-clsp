@@ -50,7 +50,6 @@ wallet_rpc_port = config["wallet"]["rpc_port"] # 9256
 prefix = "txch"
 logger = logging.getLogger()
 
-
 ##################################################################################################################
 # NOTE: use one you have in your local simulator here!
 FINGERPRINT = int(os.environ.get('FINGERPRINT'))

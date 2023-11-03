@@ -64,14 +64,17 @@ INFINITE_COST = 11000000000
 
 P2_MOD: Program = load_clvm("p2_fusion.clsp", package_or_requirement="clsp", recompile=True)
 
-AGG_SIG_ME_ADDITIONAL_DATA = DEFAULT_CONSTANTS.AGG_SIG_ME_ADDITIONAL_DATA
+PREFIX = os.environ.get("PREFIX", "xch")
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+logger = logging.getLogger()
+
 MAX_BLOCK_COST_CLVM = DEFAULT_CONSTANTS.MAX_BLOCK_COST_CLVM
 
 SINGLETON_AMOUNT = uint64(1)
 FEE_TARGET_SIZE = int(os.environ.get('FEE_TARGET_SIZE', 1000))
 COIN_TARGET_SIZE = SINGLETON_AMOUNT + FEE_TARGET_SIZE #1 singleton + 50000 fee
 DERIVATIONS = int(os.environ.get('DERIVATIONS', 1000))
-PREFIX = os.environ.get("PREFIX", "xch")
 
 SINGLETON_INNER: Program = load_clvm("fusion_singleton.clsp", package_or_requirement="clsp", recompile=True)
 
@@ -80,14 +83,24 @@ self_hostname = "localhost"
 full_node_rpc_port = config["full_node"]["rpc_port"] # 8555
 wallet_rpc_port = config["wallet"]["rpc_port"] # 9256
 
+agg_sig_config = None
+
+TESTNET = os.environ.get("TESTNET", "testnet10")
+
+if PREFIX == 'txch':
+    try:
+        agg_sig_config = bytes32.from_hexstr(config["farmer"]["network_overrides"]["constants"][TESTNET]["AGG_SIG_ME_ADDITIONAL_DATA"])
+        logger.info(f"Loaded AGG_SIG_ME_ADDITIONAL_DATA override: {agg_sig_config}")
+    except Exception as e:
+        logger.warning(f"Tried loading AGG_SIG_ME_ADDITIONAL_DATA from config. Exception {e}")
+
+AGG_SIG_ME_ADDITIONAL_DATA = agg_sig_config or DEFAULT_CONSTANTS.AGG_SIG_ME_ADDITIONAL_DATA
+
 wallet_keys = []
 puzzle_reveals = {}
 
 # track coins spent recently to make sure they are not re-selected during pending block confirmations
 recent_coins: deque = deque([], 1000)
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-logger = logging.getLogger()
 
 
 class Fusion:
@@ -567,8 +580,8 @@ class Fusion:
             SerializedProgram.from_program(full_solution)
         )
 
-        spend_bundle = await sign_coin_spends([singleton_claim_coinsol], wallet_keyf, 
-                                self.get_synthetic_private_key_for_puzzle_hash, 
+        spend_bundle = await sign_coin_spends([singleton_claim_coinsol], wallet_keyf,
+                                              self.get_synthetic_private_key_for_puzzle_hash,
                                 AGG_SIG_ME_ADDITIONAL_DATA, MAX_BLOCK_COST_CLVM, [puzzle_hash_for_synthetic_public_key])
         return spend_bundle
 
