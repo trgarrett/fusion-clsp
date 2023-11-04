@@ -96,6 +96,9 @@ if PREFIX == 'txch':
 
 AGG_SIG_ME_ADDITIONAL_DATA = agg_sig_config or DEFAULT_CONSTANTS.AGG_SIG_ME_ADDITIONAL_DATA
 
+BACKOFF_RETRY_COUNT = int(os.environ.get("BACKOFF_RETRY_COUNT", 25))
+BACKOFF_RETRY_WAIT_SECS = int(os.environ.get("BACKOFF_RETRY_WAIT_SECS", 5))
+
 wallet_keys = []
 puzzle_reveals = {}
 
@@ -673,10 +676,11 @@ class Fusion:
     # Wait for a coin record to become visible after creation - handles block farming delays
     async def wait_for_coin_record(self, coin_id: bytes32) -> CoinRecord:
         coin_record: CoinRecord = None
-        for i in range(1, 20):
-            logger.warning(f"Waiting for coin record...{coin_id.hex()}")
+        for i in range(1, BACKOFF_RETRY_COUNT):
+            if i % 5 == 0: ## keep log noise down - for happy paths (immediate block farming), this might log nothing.
+                logger.warning(f"Waiting for coin record...{coin_id.hex()}")
             coin_record = await self.node_client.get_coin_record_by_name(coin_id)
-            sleep(i * 0.25)
+            sleep(i * BACKOFF_RETRY_WAIT_SECS)
             if coin_record is not None:
                 break
         assert coin_record is not None
@@ -958,10 +962,10 @@ def puzzle_for_coin(coin: Coin) -> Program:
 
 
 async def select_coins(wallet_client: WalletRpcClient, amount: uint64):
-    excluded_coins=list()
-    coin_selection_config = CoinSelectionConfig(min_coin_amount=1, max_coin_amount=9999999999999, excluded_coin_amounts=[], excluded_coin_ids=[])
+    excluded_coin_ids = [c.name() for c in recent_coins]
+    coin_selection_config = CoinSelectionConfig(min_coin_amount=1, max_coin_amount=9999999999999, excluded_coin_amounts=[], excluded_coin_ids=excluded_coin_ids)
     coins: List[Coin] = await wallet_client.select_coins(amount=amount, wallet_id=1, coin_selection_config=coin_selection_config)
-    logger.info(f'Selecting coins, will exclude {len(excluded_coins)} coins recently spent')
+    logger.info(f'Selecting coins, will exclude {len(excluded_coin_ids)} coins recently spent')
     assert len(coins) >= 1
     logger.info(f'Selected {len(coins)} coins')
     for coin in coins:
