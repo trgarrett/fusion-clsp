@@ -105,9 +105,12 @@ puzzle_reveals = {}
 # track coins spent recently to make sure they are not re-selected during pending block confirmations
 recent_coins: deque = deque([], 1000)
 
+class PuzzleRevealException(Exception):
+     def __init__(self, message):
+         self.message = message
+
 
 class Fusion:
-
     async def init(self):
         self.node_client = await FullNodeRpcClient.create(self_hostname, uint16(full_node_rpc_port), DEFAULT_ROOT_PATH, config)
         self.wallet_client = await WalletRpcClient.create(self_hostname, uint16(wallet_rpc_port), DEFAULT_ROOT_PATH, config)
@@ -350,7 +353,8 @@ class Fusion:
             assert unft.singleton_launcher_id == nft_launcher_id
 
             full_puzzle = nft_puzzles.create_full_puzzle(unft.singleton_launcher_id, unft.metadata, unft.metadata_updater_hash, inner_puzzle)
-            assert full_puzzle.get_tree_hash().hex() == coin_record.coin.puzzle_hash.hex()
+            if full_puzzle.get_tree_hash().hex() != coin_record.coin.puzzle_hash.hex():
+                raise PuzzleRevealException(coin_record.coin.puzzle_hash.hex())
 
             assert isinstance(lineage_proof, LineageProof)
             singleton_solution = Program.to([lineage_proof.to_program(), 1, nft_layer_solution])
@@ -483,7 +487,16 @@ class Fusion:
         for a_launcher_id in a_launcher_ids:
             coin_record: CoinRecord = await self.node_client.get_coin_record_by_name(a_launcher_id)
             coin_record = await self.find_unspent_descendant(coin_record)
-            a_spend_bundle = await self.make_transfer_nft_p2_spend_bundle(singleton_inner_puzzle, singleton_coin_id, a_launcher_id, p2_singleton, OFFER_MOD_HASH)
+
+            a_spend_bundle = None
+ 
+            try:
+                # happy path - A was locked into p2
+                a_spend_bundle = await self.make_transfer_nft_p2_spend_bundle(singleton_inner_puzzle, singleton_coin_id, a_launcher_id, p2_singleton, OFFER_MOD_HASH)
+            except PuzzleRevealException:
+                # alternate path - transfer directly from user wallet to OFFER_MOD_HASH
+                a_spend_bundle = await self.make_transfer_nft_spend_bundle(a_launcher_id, OFFER_MOD_HASH)
+                
             spend_bundles.append(a_spend_bundle)
             offer_spend_bundle, nft_singleton_inner_puzzlehash = await self.make_accept_offer_nft_spend_bundle(a_spend_bundle.coin_spends[0], nonce, a_launcher_id, OFFER_MOD, nft_next_puzzlehashes[i])
             offer_launcher_ids_to_inner_puzzlehashes[a_launcher_id] = nft_singleton_inner_puzzlehash
