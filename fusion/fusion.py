@@ -498,7 +498,7 @@ class Fusion:
             except PuzzleRevealException:
                 # alternate path - transfer directly from user wallet to OFFER_MOD_HASH
                 logger.warning("Dropping back to wallet spend after NFT not found in p2 puzzle")
-                a_spend_bundle = await self.make_transfer_nft_spend_bundle(a_launcher_id, OFFER_MOD_HASH)
+                a_spend_bundle, _ = await self.make_transfer_nft_spend_bundle(a_launcher_id, OFFER_MOD_HASH)
                 
             spend_bundles.append(a_spend_bundle)
             offer_spend_bundle, nft_singleton_inner_puzzlehash = await self.make_accept_offer_nft_spend_bundle(a_spend_bundle.coin_spends[0], nonce, a_launcher_id, OFFER_MOD, nft_next_puzzlehashes[i])
