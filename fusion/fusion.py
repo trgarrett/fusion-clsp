@@ -397,7 +397,9 @@ class Fusion:
             nft_singleton_inner_puzzle = create_nft_layer_puzzle_with_curry_params(unft.metadata, unft.metadata_updater_hash, nft_inner_puzzle)
             full_puzzle = create_full_puzzle_with_nft_puzzle(nft_launcher_id, nft_singleton_inner_puzzle)
             logger.info(f"Preparing p2 spend for NFT at {full_puzzle.get_tree_hash()}")
-            assert full_puzzle.get_tree_hash().hex() == coin_record.coin.puzzle_hash.hex()
+
+            if full_puzzle.get_tree_hash().hex() != coin_record.coin.puzzle_hash.hex():
+                raise PuzzleRevealException(coin_record.coin.puzzle_hash.hex())
 
             p2_solution = Program.to([singleton_inner_puzzle.get_tree_hash(), singleton_coin_id, nft_launcher_id,
                                     nft_singleton_inner_puzzle.get_tree_hash(), recipient_puzzlehash])
