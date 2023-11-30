@@ -371,17 +371,28 @@ class Fusion:
 
     # transfer an NFT, held by a p2 singleton, to a new destination
     async def make_transfer_nft_p2_spend_bundle(self, singleton_inner_puzzle, singleton_coin_id, nft_launcher_id: bytes32,
-                                                 p2_puzzle: Program, recipient_puzzlehash: bytes32=OFFER_MOD_HASH) -> SpendBundle:
+                                                 p2_puzzle: Program, recipient_puzzlehash: bytes32=OFFER_MOD_HASH,
+                                                 parent_coin_spend: CoinSpend=None) -> SpendBundle:
         logger.info(f"Transferring p2 singleton NFT {encode_puzzle_hash(nft_launcher_id, 'nft')} to {encode_puzzle_hash(recipient_puzzlehash, PREFIX)}")
         nft_launcher_coin_record = await self.node_client.get_coin_record_by_name(nft_launcher_id)
         assert nft_launcher_coin_record is not None
-        coin_record = await self.find_unspent_descendant(nft_launcher_coin_record)
-        logger.debug(f"Transferring p2 coin with ID {coin_record.coin.name().hex()}")
-        assert coin_record is not None
-        parent_coin_record = await self.node_client.get_coin_record_by_name(coin_record.coin.parent_coin_info)
-        assert parent_coin_record is not None
-        puzzle_and_solution: CoinSpend = await self.node_client.get_puzzle_and_solution(coin_id=coin_record.coin.parent_coin_info, height=parent_coin_record.spent_block_index)
-        parent_puzzle_reveal = puzzle_and_solution.puzzle_reveal
+
+        parent_puzzle_reveal: Program = None
+        coin: Coin = None
+
+        if parent_coin_spend is None:
+            coin_record = await self.find_unspent_descendant(nft_launcher_coin_record)
+            coin = coin_record.coin
+            logger.debug(f"Transferring p2 coin with ID {coin.name().hex()}")
+            assert coin_record is not None
+            parent_coin_record = await self.node_client.get_coin_record_by_name(coin.parent_coin_info)
+            assert parent_coin_record is not None
+            parent_coin_spend: CoinSpend = await self.node_client.get_puzzle_and_solution(coin_id=coin.parent_coin_info, height=parent_coin_record.spent_block_index)
+            parent_puzzle_reveal = parent_coin_spend.puzzle_reveal
+        else:
+            parent_puzzle_reveal = parent_coin_spend.puzzle_reveal
+            coin = Coin(parent_coin_spend.coin.name(), p2_puzzle.get_tree_hash(), 1)
+            logger.debug("Transferring ephemeral coin with ID {coin.name().hex()} from P2")
 
         nft_program = Program.from_bytes(bytes(parent_puzzle_reveal))
         unft = UncurriedNFT.uncurry(*nft_program.uncurry())
@@ -398,14 +409,14 @@ class Fusion:
             full_puzzle = create_full_puzzle_with_nft_puzzle(nft_launcher_id, nft_singleton_inner_puzzle)
             logger.info(f"Preparing p2 spend for NFT at {full_puzzle.get_tree_hash()}")
 
-            if full_puzzle.get_tree_hash().hex() != coin_record.coin.puzzle_hash.hex():
-                raise PuzzleRevealException(coin_record.coin.puzzle_hash.hex())
+            if full_puzzle.get_tree_hash().hex() != coin.puzzle_hash.hex():
+                raise PuzzleRevealException(coin.puzzle_hash.hex())
 
             p2_solution = Program.to([singleton_inner_puzzle.get_tree_hash(), singleton_coin_id, nft_launcher_id,
                                     nft_singleton_inner_puzzle.get_tree_hash(), recipient_puzzlehash])
             innersol = p2_solution
 
-            lineage_proof = LineageProof(parent_coin_record.coin.parent_coin_info, parent_inner_puzzlehash, 1)
+            lineage_proof = LineageProof(parent_coin_spend.coin.parent_coin_info, parent_inner_puzzlehash, 1)
             magic_condition = None
             if unft.supports_did:
                 innersol = Program.to([innersol])
@@ -490,17 +501,22 @@ class Fusion:
             coin_record: CoinRecord = await self.node_client.get_coin_record_by_name(a_launcher_id)
             coin_record = await self.find_unspent_descendant(coin_record)
 
-            a_spend_bundle = None
- 
+            a_spend_bundle: SpendBundle = None
+
             try:
                 # happy path - A was locked into p2
                 a_spend_bundle = await self.make_transfer_nft_p2_spend_bundle(singleton_inner_puzzle, singleton_coin_id, a_launcher_id, p2_singleton, OFFER_MOD_HASH)
+                spend_bundles.append(a_spend_bundle)
             except PuzzleRevealException:
-                # alternate path - transfer directly from user wallet to OFFER_MOD_HASH
+                # alternate path - transfer directly from user wallet to OFFER_MOD_HASH 
                 logger.warning("Dropping back to wallet spend after NFT not found in p2 puzzle")
-                a_spend_bundle, _ = await self.make_transfer_nft_spend_bundle(a_launcher_id, OFFER_MOD_HASH)
-                
-            spend_bundles.append(a_spend_bundle)
+                a_spend_bundle_p2, _ = await self.make_transfer_nft_spend_bundle(a_launcher_id, p2_singleton.get_tree_hash())
+                spend_bundles.append(a_spend_bundle_p2)
+                a_spend_bundle = await self.make_transfer_nft_p2_spend_bundle(singleton_inner_puzzle, singleton_coin_id, 
+                                                                              a_launcher_id, p2_singleton, OFFER_MOD_HASH, 
+                                                                              a_spend_bundle_p2.coin_spends[0])
+                spend_bundles.append(a_spend_bundle)
+
             offer_spend_bundle, nft_singleton_inner_puzzlehash = await self.make_accept_offer_nft_spend_bundle(a_spend_bundle.coin_spends[0], nonce, a_launcher_id, OFFER_MOD, nft_next_puzzlehashes[i])
             offer_launcher_ids_to_inner_puzzlehashes[a_launcher_id] = nft_singleton_inner_puzzlehash
             spend_bundles.append(offer_spend_bundle)
