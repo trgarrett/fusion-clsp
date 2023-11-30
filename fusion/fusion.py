@@ -325,6 +325,7 @@ class Fusion:
 
         _, phs = nft_puzzles.get_metadata_and_phs(unft, puzzle_and_solution.solution)
         p2_puzzle = puzzle_reveals.get(phs)
+        assert p2_puzzle is not None, "Check you are using the correct wallet FINGERPRINT and sufficient DERIVATIONS!"
 
         primaries = []
         primaries.append(Payment(recipient_puzzlehash, 1, [recipient_puzzlehash]))
@@ -383,7 +384,7 @@ class Fusion:
         if parent_coin_spend is None:
             coin_record = await self.find_unspent_descendant(nft_launcher_coin_record)
             coin = coin_record.coin
-            logger.debug(f"Transferring p2 coin with ID {coin.name().hex()}")
+            logger.info(f"Transferring p2 coin with ID {coin.name().hex()}")
             assert coin_record is not None
             parent_coin_record = await self.node_client.get_coin_record_by_name(coin.parent_coin_info)
             assert parent_coin_record is not None
@@ -391,7 +392,8 @@ class Fusion:
             parent_puzzle_reveal = parent_coin_spend.puzzle_reveal
         else:
             parent_puzzle_reveal = parent_coin_spend.puzzle_reveal
-            coin = Coin(parent_coin_spend.coin.name(), p2_puzzle.get_tree_hash(), 1)
+            coin_full_puzzle: Program = await self.full_puzzle_for_p2_puzzle(nft_launcher_id, p2_puzzle)
+            coin = Coin(parent_coin_spend.coin.name(), coin_full_puzzle.get_tree_hash(), 1)
             logger.debug("Transferring ephemeral coin with ID {coin.name().hex()} from P2")
 
         nft_program = Program.from_bytes(bytes(parent_puzzle_reveal))
@@ -428,12 +430,12 @@ class Fusion:
             assert isinstance(lineage_proof, LineageProof)
             singleton_solution = Program.to([lineage_proof.to_program(), 1, nft_layer_solution])
 
-            coin_spend = CoinSpend(coin_record.coin, full_puzzle, singleton_solution)
+            coin_spend = CoinSpend(coin, full_puzzle, singleton_solution)
 
             nft_spend_bundle = await sign_coin_spends([coin_spend], wallet_keyf, 
                         self.get_synthetic_private_key_for_puzzle_hash, 
                         AGG_SIG_ME_ADDITIONAL_DATA, MAX_BLOCK_COST_CLVM, [puzzle_hash_for_synthetic_public_key])
-
+            
             return nft_spend_bundle
 
 
@@ -511,6 +513,7 @@ class Fusion:
                 # alternate path - transfer directly from user wallet to OFFER_MOD_HASH 
                 logger.warning("Dropping back to wallet spend after NFT not found in p2 puzzle")
                 a_spend_bundle_p2, _ = await self.make_transfer_nft_spend_bundle(a_launcher_id, p2_singleton.get_tree_hash())
+                logger.warning("Spending wallet asset from ephemeral home (p2) to OFFER_MOD")
                 spend_bundles.append(a_spend_bundle_p2)
                 a_spend_bundle = await self.make_transfer_nft_p2_spend_bundle(singleton_inner_puzzle, singleton_coin_id, 
                                                                               a_launcher_id, p2_singleton, OFFER_MOD_HASH, 
@@ -526,6 +529,9 @@ class Fusion:
                                                                release_coin_ids, a_launcher_ids, nft_next_puzzlehashes, 'a', nonce,
                                                                offer_launcher_ids_to_inner_puzzlehashes, wallet_offers_to_assert))
         spend_bundle = SpendBundle.aggregate(spend_bundles)
+
+        logger.info(json.dumps(spend_bundle.to_json_dict()))
+
         return spend_bundle
 
 
