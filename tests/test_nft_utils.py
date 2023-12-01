@@ -91,6 +91,13 @@ class TestNftUtils:
         assert expected == result
 
     @pytest.mark.asyncio
+    async def test_list_of_pairs_unbalanced(self):
+        l1 = []
+        l2 = [1]
+        with pytest.raises(ValueError):
+            LIST_OF_PAIRS_MOD.run([l1, l2])
+
+    @pytest.mark.asyncio
     async def test_list_of_pairs_one(self):
         l1 = [1]
         l2 = [2]
