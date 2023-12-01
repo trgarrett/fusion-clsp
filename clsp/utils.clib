@@ -60,7 +60,7 @@
       (if (all (l l1) (l l2))
           ; a list remains
           (c (list (f l1) (f l2)) (list_of_pairs (r l1) (r l2)))
-          ; end
+          ; either the end or unbalanced (error case)
           (if (any (l l1) (l l2)) ; unbalanced
             (x)
             ()
