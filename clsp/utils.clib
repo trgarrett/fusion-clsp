@@ -18,27 +18,6 @@
     )
   )
 
-  ;;;
-  ; Calculate a naive (and super verbose) lineage proof
-  ;;;
-  (defun calculate_coin_id_from_lineage_proof (lineage_proof)
-    (if (l lineage_proof)
-        (if (all (f lineage_proof) (r lineage_proof))
-          ; two or more items
-          (if (l (r (r lineage_proof)))
-            ; more than two
-            (calculate_coin_id_from_lineage_proof (c (calculate_coin_id (f lineage_proof) (f (r lineage_proof)) 1) (r (r lineage_proof))))
-            ; two
-            (calculate_coin_id (f lineage_proof) (f (r lineage_proof)) 1)
-          )
-          ; one item list
-          (f lineage_proof)
-        )
-        ; error condition or misuse of the function
-        (x)
-    )
-  )
-
   ;; return the full puzzlehash for a singleton with the innerpuzzle curried in
   (defun-inline calculate_full_puzzle_hash (singleton_mod_hash launcher_id launcher_puzzle_hash inner_puzzle_hash)
       (curry_hashes_inline singleton_mod_hash
@@ -68,4 +47,16 @@
       )
   )
 
+)
+
+
+(curry_hashes_inline 
+    SINGLETON_MOD_HASH   
+    (sha256sum (c SINGLETON_MOD_HASH (c nft_launcher_id LAUNCHER_PUZZLE_HASH))) 
+    (curry_hashes_inline 
+        NFT_STATE_LAYER_MOD_HASH 
+        (sha256 1 NFT_STATE_LAYER_MOD_HASH) 
+        metadata_hash
+        METADATA_UPDATER_PUZZLE_HASH_HASH
+        nft_inner_puzzle_hash)
 )
