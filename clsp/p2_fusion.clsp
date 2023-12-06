@@ -3,6 +3,8 @@
         SINGLETON_MOD_HASH ; the mod-hash for the singleton_top_layer puzzle
         LAUNCHER_ID ; the ID of the singleton we are committed to paying to
         LAUNCHER_PUZZLE_HASH ; the puzzle hash of the launcher
+        NFT_STATE_LAYER_MOD_HASH ; the puzzle hash of the nft state layer puzzle
+        METADATA_UPDATER_PUZZLE_HASH_HASH ; the puzzle hash of the metadata update puzzle hash
         singleton_inner_puzzle_hash ; the inner puzzlehash for our singleton at the current time
         singleton_coin_id ; the specific coin we want to make an announcement tied to
         nft_launcher_id ; the launcher ID of the NFT

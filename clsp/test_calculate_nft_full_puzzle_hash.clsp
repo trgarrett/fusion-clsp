@@ -1,0 +1,23 @@
+(mod 
+   (
+     SINGLETON_MOD_HASH 
+     LAUNCHER_PUZZLE_HASH 
+     NFT_STATE_LAYER_MOD_HASH
+     METADATA_UPDATER_PUZZLE_HASH_HASH
+     nft_launcher_id
+     metadata_hash
+     nft_inner_puzzle_hash
+   )
+
+  (include utils.clib)
+
+  (calculate_nft_full_puzzle_hash
+     SINGLETON_MOD_HASH 
+     LAUNCHER_PUZZLE_HASH 
+     NFT_STATE_LAYER_MOD_HASH
+     METADATA_UPDATER_PUZZLE_HASH_HASH
+     nft_launcher_id
+     metadata_hash
+     nft_inner_puzzle_hash
+  )
+)
