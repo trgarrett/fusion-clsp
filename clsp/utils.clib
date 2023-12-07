@@ -20,7 +20,7 @@
 
   ;; return the full puzzlehash for a singleton with the innerpuzzle curried in
   (defun-inline calculate_full_puzzle_hash (singleton_mod_hash launcher_id launcher_puzzle_hash inner_puzzle_hash)
-      (curry_hashes_inline singleton_mod_hash
+    (curry_hashes_inline singleton_mod_hash
       ; calculate the singleton struct
       (sha256 2
         (sha256 1 singleton_mod_hash)
@@ -43,13 +43,20 @@
                                                 nft_inner_puzzle_hash)
     (curry_hashes_inline 
       SINGLETON_MOD_HASH   
-      (sha256tree (c SINGLETON_MOD_HASH (c nft_launcher_id LAUNCHER_PUZZLE_HASH))) 
+      (sha256 2
+        (sha256 1 SINGLETON_MOD_HASH)
+        (sha256 2
+          (sha256 1 nft_launcher_id)
+          (sha256 1 LAUNCHER_PUZZLE_HASH)
+        )
+      )
       (curry_hashes_inline 
-          NFT_STATE_LAYER_MOD_HASH 
-          (sha256 1 NFT_STATE_LAYER_MOD_HASH) 
-          metadata_hash
-          METADATA_UPDATER_PUZZLE_HASH_HASH
-          nft_inner_puzzle_hash)
+        NFT_STATE_LAYER_MOD_HASH 
+        (sha256 1 NFT_STATE_LAYER_MOD_HASH)
+        metadata_hash
+        METADATA_UPDATER_PUZZLE_HASH_HASH
+        nft_inner_puzzle_hash
+      )
     )  
   )
 
