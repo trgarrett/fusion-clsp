@@ -7,7 +7,7 @@
 ;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 (mod (
-        SINGLETON_MOD_HASH
+        SINGLETON_MOD_HASH ; Use the SINGLETON_STRUCT here, it is well known and also used in e.g. did_innerpuz. Makes calculate_full_puzzle_hash simpler too
         LAUNCHER_ID
         LAUNCHER_PUZZLE_HASH
         NFT_STATE_LAYER_MOD_HASH ; the puzzle hash of the nft state layer puzzle
@@ -16,7 +16,7 @@
         OFFER_MOD_HASH ; the puzzle hash of the standard offer puzzle
         NFT_A_LAUNCHER_IDS ; commitment to one side of the swap pair, LIST of launcher coin IDs
         NFT_B_LAUNCHER_IDS ; commitment to the other side of a swap pair, LIST of launcher coin IDs
-        singleton_coin_id ; the singleton coin ID
+        singleton_coin_id ; the singleton coin ID -> I'd call this my_id and my_inner_puzzlehash, per convention
         singleton_inner_puzzlehash ; the current inner puzzlehash for the singleton
         nft_coin_ids_to_lock ; the coin IDs to lock, in the same order as the corresponding launcher IDs list
         nft_inner_puzzlehashes_to_lock ; the singleton inner puzzlehashes of the NFTS to be released from OFFER_MOD to p2_singleton -- for announcement reconciliation; in same order as curried launcher IDs
@@ -39,7 +39,7 @@
       ; who am I?
       (list ASSERT_MY_COIN_ID singleton_coin_id)
       (list ASSERT_MY_PUZZLEHASH (calculate_full_puzzle_hash SINGLETON_MOD_HASH LAUNCHER_ID LAUNCHER_PUZZLE_HASH singleton_inner_puzzlehash))
-      (list ASSERT_MY_AMOUNT 1)
+      (list ASSERT_MY_AMOUNT 1) ; This feels unnecessary. And if you ever create such a singleton with amount > 1 it is locked forever.
 
       ; spend myself forward
       (list CREATE_COIN singleton_inner_puzzlehash 1 (list LAUNCHER_ID)) ;; opt to keep details beyond launcher ID encoded in eve coin spend
@@ -47,18 +47,14 @@
   )
 
   ; maintain announcement loop with p2 for unlocking to puzzlehash
-  (defun announce_p2_releases (singleton_coin_id nft_ids_to_release release_puzzlehash conditions_so_far)
-      (if (l (r nft_ids_to_release))
-        (announce_p2_releases singleton_coin_id (r nft_ids_to_release) release_puzzlehash
-          (c 
-            (list CREATE_PUZZLE_ANNOUNCEMENT (sha256 singleton_coin_id (f (f nft_ids_to_release)) release_puzzlehash))
-            conditions_so_far
-          )
-        )
-        (c 
+  ; You can simplify those for loops a lot by turning them upside down:
+  (defun announce_p2_releases (singleton_coin_id nft_ids_to_release release_puzzlehash)
+      (if nft_ids_to_release
+        (c
           (list CREATE_PUZZLE_ANNOUNCEMENT (sha256 singleton_coin_id (f (f nft_ids_to_release)) release_puzzlehash))
-          conditions_so_far
+          (announce_p2_releases singleton_coin_id (r nft_ids_to_release) release_puzzlehash)
         )
+        ()
       )
   )
 

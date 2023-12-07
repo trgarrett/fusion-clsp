@@ -22,7 +22,7 @@
         (list
             ; prove the parentage of the supplied NFT coin matches the expected derived puzzle hash
             (list ASSERT_MY_PUZZLEHASH (calculate_full_puzzle_hash SINGLETON_MOD_HASH nft_launcher_id LAUNCHER_PUZZLE_HASH nft_inner_puzzle_hash))
-            (list ASSERT_MY_AMOUNT 1)
+            (list ASSERT_MY_AMOUNT 1) ; I would pass in the amount into the solution, assert it here and use it below. Feels like an arbitrary restriction that might lock NFTs with amount > 1 into this puzzle forever
 
             ; assert singleton spend behavior
             (list ASSERT_PUZZLE_ANNOUNCEMENT
