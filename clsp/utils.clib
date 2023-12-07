@@ -60,14 +60,14 @@
     )  
   )
 
-  ;;;(defun-inline calculate_nft_ownership_layer_puzzle_hash (NFT_OWNERSHIP_LAYER_MOD_HASH new_owner transfer_program_hash nft_inner_puzzle_hash)
-  ;;;    (curry_hashes NFT_OWNERSHIP_LAYER_MOD_HASH
-  ;;;      (sha256 1 nft_ownership_layer_mod_hash)
-  ;;;      (sha256 1 new_owner)
-  ;;;      transfer_program_hash
-  ;;;      inner_puzzle_hash
-  ;;;    )
-  ;;;)
+  (defun-inline calculate_nft_ownership_layer_puzzle_hash (NFT_OWNERSHIP_LAYER_MOD_HASH current_owner transfer_program_hash inner_puzzle_hash)
+      (curry_hashes NFT_OWNERSHIP_LAYER_MOD_HASH
+        (sha256 1 NFT_OWNERSHIP_LAYER_MOD_HASH)
+        (sha256 1 current_owner)
+        transfer_program_hash
+        inner_puzzle_hash
+      )
+  )
 
   ;; 
   ;;; given two lists of the same size, return a list of pairs ((l1[0] . l2[0]) ... (l1[n] . l2[n]))
