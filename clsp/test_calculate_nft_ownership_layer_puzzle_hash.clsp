@@ -1,0 +1,17 @@
+(mod 
+   (
+     NFT_OWNERSHIP_LAYER_MOD_HASH
+     current_owner
+     transfer_program_hash
+     inner_puzzle_hash
+   )
+
+  (include utils.clib)
+
+  (calculate_nft_ownership_layer_puzzle_hash
+     NFT_OWNERSHIP_LAYER_MOD_HASH
+     current_owner
+     transfer_program_hash
+     inner_puzzle_hash
+  )
+)

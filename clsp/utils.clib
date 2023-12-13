@@ -19,16 +19,10 @@
   )
 
   ;; return the full puzzlehash for a singleton with the innerpuzzle curried in
-  (defun-inline calculate_full_puzzle_hash (singleton_mod_hash launcher_id launcher_puzzle_hash inner_puzzle_hash)
-    (curry_hashes_inline singleton_mod_hash
+  (defun-inline calculate_full_puzzle_hash (SINGLETON_STRUCT inner_puzzle_hash)
+    (curry_hashes_inline (f SINGLETON_STRUCT)
       ; calculate the singleton struct
-      (sha256 2
-        (sha256 1 singleton_mod_hash)
-        (sha256 2
-          (sha256 1 launcher_id)
-          (sha256 1 launcher_puzzle_hash)
-        )
-      )
+      (sha256tree SINGLETON_STRUCT)
       inner_puzzle_hash
     )
   )
@@ -60,21 +54,21 @@
     )  
   )
 
-  ;;;(defun-inline calculate_nft_ownership_layer_puzzle_hash (NFT_OWNERSHIP_LAYER_MOD_HASH new_owner transfer_program_hash nft_inner_puzzle_hash)
-  ;;;    (curry_hashes NFT_OWNERSHIP_LAYER_MOD_HASH
-  ;;;      (sha256 1 nft_ownership_layer_mod_hash)
-  ;;;      (sha256 1 new_owner)
-  ;;;      transfer_program_hash
-  ;;;      inner_puzzle_hash
-  ;;;    )
-  ;;;)
+  (defun-inline calculate_nft_ownership_layer_puzzle_hash (NFT_OWNERSHIP_LAYER_MOD_HASH current_owner transfer_program_hash inner_puzzle_hash)
+      (curry_hashes NFT_OWNERSHIP_LAYER_MOD_HASH
+        (sha256 1 NFT_OWNERSHIP_LAYER_MOD_HASH)
+        (sha256 1 current_owner)
+        transfer_program_hash
+        inner_puzzle_hash
+      )
+  )
 
   ;; 
-  ;;; given two lists of the same size, return a list of pairs ((l1[0] . l2[0]) ... (l1[n] . l2[n]))
-  (defun list_of_pairs (l1 l2)
+  ;;; given a list of atoms and a list of lists, prepend each atom to the respective list ((l1[0] . l2[0]) ... (l1[n] . l2[n]))
+  (defun prepend_entries_to_lists (l1 l2)
       (if (all (l l1) (l l2))
           ; a list remains
-          (c (list (f l1) (f l2)) (list_of_pairs (r l1) (r l2)))
+          (c (c (f l1) (f l2)) (prepend_entries_to_lists (r l1) (r l2)))
           ; either the end or unbalanced (error case)
           (if (any (l l1) (l l2))
             (x) ; unbalanced
