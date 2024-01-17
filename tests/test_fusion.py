@@ -22,6 +22,12 @@ from chia.util.ints import uint16
 from chia.util.default_root import DEFAULT_ROOT_PATH
 #from chia.wallet.nft_wallet.nft_puzzles import create_full_puzzle_with_nft_puzzle
 from chia.wallet.nft_wallet.nft_info import NFTInfo
+from chia.wallet.nft_wallet.nft_puzzles import (
+    NFT_METADATA_UPDATER,
+    NFT_STATE_LAYER_MOD_HASH,
+    NFT_TRANSFER_PROGRAM_DEFAULT,
+    NFT_OWNERSHIP_LAYER_HASH
+)
 from chia.wallet.payment import Payment
 from chia.wallet.puzzle_drivers import PuzzleInfo
 from chia.wallet.puzzles.load_clvm import load_clvm
@@ -40,6 +46,9 @@ from chia.util.bech32m import decode_puzzle_hash, encode_puzzle_hash
 from fusion.fusion import Fusion, wallet_keys, puzzle_for_coin
 
 from typing import Any, Dict, List, Optional, Set, Tuple
+
+NFT_METADATA_UPDATER_PUZZLE_HASH: bytes32 = NFT_METADATA_UPDATER.get_tree_hash()
+NFT_METADATA_UPDATER_PUZZLE_HASH_HASH: Program = Program.to(NFT_METADATA_UPDATER_PUZZLE_HASH).get_tree_hash()
 
 ACS = Program.to(1)
 
@@ -62,18 +71,21 @@ class TestNftUpgrade:
     async def test_p2_singleton(self):
         p2_mod: Program = load_clvm("p2_fusion.clsp", package_or_requirement="clsp", recompile=True, include_standard_libraries=True)
         assert p2_mod is not None
-        launcher_id = bytes32.from_hexstr("0x9bb9175628b08d6f37860bf7f4e320230ffd7cae76bf4c4a618b705c87402be4") # random test value
-        nft_launcher_id = bytes32.from_hexstr("0x22e48b670ff415a5d49b720d34d44cebd34c2c65288ff5bd75d82351ffacd925")
-        cafe_babe = bytes32.from_hexstr("0xcafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe")
-        next_puzzlehash = bytes32.from_hexstr("0x610f8034eba64c56ed6e7a66791e9be5da37be8c8058681094c848a053134832")
 
+        launcher_id = bytes32.from_hexstr("0x9bb9175628b08d6f37860bf7f4e320230ffd7cae76bf4c4a618b705c87402be4") # random test value
         singleton_inner_puzzlehash = ACS.get_tree_hash()
         singleton_coin_id = bytes32.from_hexstr("0x1153f45c9a956058b19be9625c45efca3904ca362a6d2221341e6546d5734d78")
+        nft_launcher_id = bytes32.from_hexstr("0x22e48b670ff415a5d49b720d34d44cebd34c2c65288ff5bd75d82351ffacd925")
+        nft_singleton_inner_puzzle_hash = bytes32.from_hexstr("0xcafebabecafebabecafebabecafebabecafebabecafebabecafebabecafebabe")
+        amount = 1
+        next_puzzlehash = bytes32.from_hexstr("0x610f8034eba64c56ed6e7a66791e9be5da37be8c8058681094c848a053134832")
 
-        result: Program = p2_mod.run(Program.to([SINGLETON_MOD_HASH, launcher_id, SINGLETON_LAUNCHER_HASH, singleton_inner_puzzlehash,
-                                                 singleton_coin_id, nft_launcher_id, cafe_babe, next_puzzlehash]))
+        result: Program = p2_mod.run(Program.to([SINGLETON_MOD_HASH, launcher_id, SINGLETON_LAUNCHER_HASH,
+                                                 singleton_inner_puzzlehash, singleton_coin_id,
+                                                 nft_launcher_id, nft_singleton_inner_puzzle_hash,
+                                                 amount, next_puzzlehash]))
 
-        assert Program.fromhex("ffff48ffa06dc5f208f1c552a87a8c0519cebfa81866cfeaff8c15c719abf432558b56307b80ffff49ff0180ffff3fffa0bced5b08fc8737818f9742baf508c39536c7ddec4b668f238e15efad0951640880ffff33ffa0610f8034eba64c56ed6e7a66791e9be5da37be8c8058681094c848a053134832ff01ffffa0610f8034eba64c56ed6e7a66791e9be5da37be8c8058681094c848a0531348328080ffff3cffa0880e4b5aa3cd2f8499f64cd1de8aa2d2d8e46e72e833e8062809f3828f27e9db8080") == result
+        assert Program.fromhex("0xffff49ff0180ffff48ffa06dc5f208f1c552a87a8c0519cebfa81866cfeaff8c15c719abf432558b56307b80ffff3fffa0bced5b08fc8737818f9742baf508c39536c7ddec4b668f238e15efad0951640880ffff33ffa0610f8034eba64c56ed6e7a66791e9be5da37be8c8058681094c848a053134832ff01ffffa0610f8034eba64c56ed6e7a66791e9be5da37be8c8058681094c848a0531348328080ffff3cffa0880e4b5aa3cd2f8499f64cd1de8aa2d2d8e46e72e833e8062809f3828f27e9db8080") == result
 
 
     @pytest.mark.asyncio

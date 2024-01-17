@@ -15,7 +15,7 @@ from chia.wallet.puzzles.singleton_top_layer_v1_1 import (
     SINGLETON_MOD_HASH
 )
 
-LIST_OF_PAIRS_MOD: Program = load_clvm("test_list_of_pairs.clsp", package_or_requirement="clsp", recompile=True)
+PREPEND_ENTRIES_MOD: Program = load_clvm("test_prepend_entries_to_lists.clsp", package_or_requirement="clsp", recompile=True)
 
 CALCULATE_NFT_FULL_PUZZLE_HASH_MOD: Program = load_clvm("test_calculate_nft_full_puzzle_hash.clsp", package_or_requirement="clsp", recompile=True)
 CALCULATE_NFT_OWNERSHIP_LAYER_PUZZLE_HASH_MOD: Program = load_clvm("test_calculate_nft_ownership_layer_puzzle_hash.clsp", package_or_requirement="clsp", recompile=True)
@@ -56,35 +56,36 @@ class TestNftUtils:
         expected: Program = Program.to(bytes32.from_hexstr("0x5bf47b4ac39c66c5fd2247a623acc22500254d2574d0b4496ec9ed36cd3c1847"))
         assert expected == result
 
+
     @pytest.mark.asyncio
-    async def test_list_of_pairs_empty(self):
+    async def test_prepend_entries_to_lists_empty(self):
         l1 = []
         l2 = []
-        result: Program = LIST_OF_PAIRS_MOD.run([l1, l2])
+        result: Program = PREPEND_ENTRIES_MOD.run([l1, l2])
         expected: Program = Program.to([])
         assert expected == result
 
     @pytest.mark.asyncio
-    async def test_list_of_pairs_unbalanced(self):
+    async def test_prepend_entries_to_lists_unbalanced(self):
         l1 = []
         l2 = [1]
         with pytest.raises(ValueError):
-            LIST_OF_PAIRS_MOD.run([l1, l2])
+            PREPEND_ENTRIES_MOD.run([l1, l2])
 
     @pytest.mark.asyncio
-    async def test_list_of_pairs_one(self):
+    async def test_prepend_entries_to_lists_one(self):
         l1 = [1]
         l2 = [2]
-        result: Program = LIST_OF_PAIRS_MOD.run([l1, l2])
-        expected: Program = Program.to([[1, 2]])
+        result: Program = PREPEND_ENTRIES_MOD.run([l1, l2])
+        expected: Program = Program.to([(1, 2)])
         assert expected == result
 
     @pytest.mark.asyncio
-    async def test_list_of_pairs_four(self):
+    async def test_prepend_entries_to_lists_four(self):
         l1 = [1, 2, 5, 9]
         l2 = [3, 4, 7, 11]
-        result: Program = LIST_OF_PAIRS_MOD.run([l1, l2])
-        expected: Program = Program.to([[1, 3], [2, 4], [5, 7], [9, 11]])
+        result: Program = PREPEND_ENTRIES_MOD.run([l1, l2])
+        expected: Program = Program.to([(1, 3), (2, 4), (5, 7), (9, 11)])
         assert expected == result
 
 

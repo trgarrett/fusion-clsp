@@ -6,5 +6,5 @@
 
   (include utils.clib)
 
-  (list_of_pairs l1 l2)
+  (prepend_entries_to_lists l1 l2)
 )
