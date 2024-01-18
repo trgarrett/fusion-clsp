@@ -560,13 +560,10 @@ class Fusion:
 
         # logger.info(f"Size of nft_inner_puzzlehashes_to_lock: {len(nft_inner_puzzlehashes_to_lock)}, size of nft_inner_puzzlehashes_to_release: {len(nft_inner_puzzlehashes_to_release)}")
 
-        p2_singleton = self.pay_to_singleton_puzzle(singleton_launcher_id)
-        p2_puzzlehash = p2_singleton.get_tree_hash()
-
         nfts_to_lock = []
         for coin_id in nft_coin_ids_to_lock:
             i = 0
-            nfts_to_lock.append(await self.lookup_nft_coin_details(nft_launcher_ids_to_lock[i], coin_id, p2_puzzlehash))
+            nfts_to_lock.append(await self.lookup_nft_coin_details(nft_launcher_ids_to_lock[i], coin_id))
             i += 1
 
         nfts_to_unlock = []
@@ -603,7 +600,7 @@ class Fusion:
 
     # lookup_nft_coin_details
     # (coin_id nft_metadata_hash nft_did nft_transfer_program_hash target_inner_puzzlehash)
-    async def lookup_nft_coin_details(self, launcher_id, coin_id, target_inner_puzzlehash):
+    async def lookup_nft_coin_details(self, launcher_id, coin_id, target_inner_puzzlehash=None):
         
         nft_coin_record: CoinRecord = await self.node_client.get_coin_record_by_name(coin_id)
 
@@ -616,7 +613,10 @@ class Fusion:
 
         nft_program = Program.from_bytes(bytes(puzzle_and_solution.puzzle_reveal))
         unft = UncurriedNFT.uncurry(*nft_program.uncurry())
-        details = [coin_id, unft.metadata.get_tree_hash(), unft.owner_did, unft.transfer_program.get_tree_hash(), target_inner_puzzlehash]
+        details = [coin_id, unft.metadata.get_tree_hash(), unft.owner_did, unft.transfer_program.get_tree_hash()]
+
+        if target_inner_puzzlehash is not None:
+            details.append(target_inner_puzzlehash)
 
         logger.debug(f"Full puzzlehash at OFFER_MOD will be {(await self.full_puzzle_for_p2_puzzle(launcher_id, OFFER_MOD)).get_tree_hash()}")
 
