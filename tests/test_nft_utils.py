@@ -56,6 +56,17 @@ class TestNftUtils:
         expected: Program = Program.to(bytes32.from_hexstr("0x5bf47b4ac39c66c5fd2247a623acc22500254d2574d0b4496ec9ed36cd3c1847"))
         assert expected == result
 
+    @pytest.mark.asyncio
+    async def test_calculate_nft_ownership_layer_puzzle_hash_2(self):
+        # using NFT that was problematic for troubleshooting in simulator
+        result: Program = CALCULATE_NFT_OWNERSHIP_LAYER_PUZZLE_HASH_MOD.run([
+            NFT_OWNERSHIP_LAYER_HASH,
+            Program.to(bytes32.from_hexstr("0xdd44ce3a68d5efe4bd1981979c2bcb906405a494952286710627d241f07c61b0")),  # current owner
+            bytes32.from_hexstr("0xf47061827ce4ef4d5d7ae537695133a34b62a53353a865db0b09061288af29bd"), # transfer program hash
+            bytes32.from_hexstr("0x556c22e6a209998508e330da1a25b0cf786a0b42055bf3eaf0d45ec900b45c02") # inner puzzlehash
+        ])
+        expected: Program = Program.to(bytes32.from_hexstr("3fee3a5f1c7c83207c98b35203fa4a2e8775ade3746d3022aa02fdd9a1fe8393"))
+        assert expected == result
 
     @pytest.mark.asyncio
     async def test_prepend_entries_to_lists_empty(self):

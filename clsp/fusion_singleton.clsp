@@ -17,9 +17,9 @@
         NFT_B_LAUNCHER_IDS ; commitment to the other side of a swap pair, LIST of launcher coin IDs
         my_id ; the singleton coin ID
         my_inner_puzzlehash ; the current inner puzzlehash for the singleton
-        nfts_to_lock ; list of (coin_id nft_metadata_hash nft_did nft_transfer_program_hash inner_puzzlehash target_inner_puzzlehash)
+        nfts_to_lock ; list of (coin_id nft_metadata_hash nft_did nft_transfer_program_hash target_inner_puzzlehash)
                      ; target_inner_puzzlehash should always be P2_SINGLETON_PUZZLE_HASH
-        nfts_to_unlock ; list of (coin_id nft_metadata_hash nft_did nft_transfer_program_hash inner_puzzlehash target_inner_puzzlehash)
+        nfts_to_unlock ; list of (coin_id nft_metadata_hash nft_did nft_transfer_program_hash target_inner_puzzlehash)
         a_or_b ; 'a' or 'b' - the coin symbolic name to release
         offer_nonce ; the cryptographic nonce required for offer settlement
      )
@@ -43,19 +43,18 @@
 
   ; maintain announcement loop with OFFER_MOD for making sure unlocked outputs get to final puzzlehash
   (defun-inline assert_offer_condition (SINGLETON_MOD_HASH LAUNCHER_PUZZLE_HASH OFFER_MOD_HASH NFT_STATE_LAYER_MOD_HASH NFT_OWNERSHIP_LAYER_MOD_HASH METADATA_UPDATER_PUZZLE_HASH_HASH
-          (nft_launcher_id coin_id nft_metadata_hash nft_did nft_transfer_program_hash inner_puzzlehash target_inner_puzzlehash) offer_nonce)
-
+          (nft_launcher_id nft_coin_id nft_metadata_hash nft_did nft_transfer_program_hash target_inner_puzzlehash) offer_nonce)
     (list ASSERT_PUZZLE_ANNOUNCEMENT
       (sha256
         ; need to PROVE announcement from OFFER_MOD_HASH to prevent fakes
-        (calculate_nft_full_puzzle_hash 
+        (calculate_nft_full_puzzle_hash
               SINGLETON_MOD_HASH LAUNCHER_PUZZLE_HASH 
               NFT_STATE_LAYER_MOD_HASH METADATA_UPDATER_PUZZLE_HASH_HASH
               nft_launcher_id nft_metadata_hash
               (calculate_nft_ownership_layer_puzzle_hash 
                   NFT_OWNERSHIP_LAYER_MOD_HASH nft_did nft_transfer_program_hash OFFER_MOD_HASH
-              )
-        )        
+              ) 
+        )      
         (sha256tree (list offer_nonce (notarized_payment target_inner_puzzlehash )))
       )
     )
@@ -78,9 +77,9 @@
     (if nfts_to_lock
       (c
         (assert_offer_condition SINGLETON_MOD_HASH LAUNCHER_PUZZLE_HASH OFFER_MOD_HASH NFT_STATE_LAYER_MOD_HASH NFT_OWNERSHIP_LAYER_MOD_HASH METADATA_UPDATER_PUZZLE_HASH_HASH
-            (f nfts_to_lock) offer_nonce)
+                (f nfts_to_lock) offer_nonce)
         (compute_nft_lock_conditions SINGLETON_MOD_HASH LAUNCHER_PUZZLE_HASH OFFER_MOD_HASH NFT_STATE_LAYER_MOD_HASH NFT_OWNERSHIP_LAYER_MOD_HASH METADATA_UPDATER_PUZZLE_HASH_HASH
-            (r nfts_to_lock) offer_nonce conditions_so_far)
+                (r nfts_to_lock) offer_nonce conditions_so_far)
       )
       conditions_so_far
     )
@@ -91,12 +90,14 @@
     
     (if nfts_to_unlock
       (c
-        (assert_offer_condition SINGLETON_MOD_HASH LAUNCHER_PUZZLE_HASH OFFER_MOD_HASH NFT_STATE_LAYER_MOD_HASH NFT_OWNERSHIP_LAYER_MOD_HASH METADATA_UPDATER_PUZZLE_HASH_HASH (f nfts_to_unlock) offer_nonce)
+        (assert_offer_condition SINGLETON_MOD_HASH LAUNCHER_PUZZLE_HASH OFFER_MOD_HASH NFT_STATE_LAYER_MOD_HASH NFT_OWNERSHIP_LAYER_MOD_HASH METADATA_UPDATER_PUZZLE_HASH_HASH 
+                (f nfts_to_unlock) offer_nonce)
         (c
           (assert_p2_condition my_id (f (f nfts_to_unlock)) (f (r (f nfts_to_unlock))) OFFER_MOD_HASH)
           (c
             (announce_p2_condition my_id (f (f nfts_to_unlock)) OFFER_MOD_HASH)
-            (compute_nft_unlock_conditions SINGLETON_MOD_HASH LAUNCHER_PUZZLE_HASH OFFER_MOD_HASH NFT_STATE_LAYER_MOD_HASH NFT_OWNERSHIP_LAYER_MOD_HASH METADATA_UPDATER_PUZZLE_HASH_HASH (r nfts_to_unlock) my_id offer_nonce conditions_so_far)
+            (compute_nft_unlock_conditions SINGLETON_MOD_HASH LAUNCHER_PUZZLE_HASH OFFER_MOD_HASH 
+                    NFT_STATE_LAYER_MOD_HASH NFT_OWNERSHIP_LAYER_MOD_HASH METADATA_UPDATER_PUZZLE_HASH_HASH (r nfts_to_unlock) my_id offer_nonce conditions_so_far)
           )
         )
       )
@@ -113,9 +114,10 @@
                                   my_id my_inner_puzzlehash 
                                   nfts_to_lock nfts_to_unlock
                                   offer_nonce)
-      (compute_nft_lock_conditions (f SINGLETON_STRUCT) (r (r SINGLETON_STRUCT)) OFFER_MOD_HASH NFT_STATE_LAYER_MOD_HASH NFT_OWNERSHIP_LAYER_MOD_HASH METADATA_UPDATER_PUZZLE_HASH_HASH
-              nfts_to_lock offer_nonce
-          (compute_nft_unlock_conditions 
+      (compute_nft_lock_conditions 
+              (f SINGLETON_STRUCT) (r (r SINGLETON_STRUCT)) OFFER_MOD_HASH NFT_STATE_LAYER_MOD_HASH NFT_OWNERSHIP_LAYER_MOD_HASH METADATA_UPDATER_PUZZLE_HASH_HASH
+               nfts_to_lock offer_nonce
+          (compute_nft_unlock_conditions
                   (f SINGLETON_STRUCT) (r (r SINGLETON_STRUCT)) OFFER_MOD_HASH NFT_STATE_LAYER_MOD_HASH NFT_OWNERSHIP_LAYER_MOD_HASH METADATA_UPDATER_PUZZLE_HASH_HASH 
                    nfts_to_unlock my_id offer_nonce
               (base_conditions SINGLETON_STRUCT my_id my_inner_puzzlehash)

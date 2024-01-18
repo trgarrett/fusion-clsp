@@ -532,8 +532,8 @@ class Fusion:
     # singleton spend
     async def make_swap_spend_bundle(self, singleton_launcher_id, singleton_inner_puzzle,
                                      nft_coin_ids_to_lock: List[bytes32], nft_launcher_ids_to_lock,
-                                     nft_coin_ids_to_release: List[bytes32], nft_launcher_ids_to_release,
-                                     nft_next_puzzlehashes: List[bytes32], a_or_b, nonce: bytes32, 
+                                     nft_coin_ids_to_unlock: List[bytes32], nft_launcher_ids_to_unlock,
+                                     nft_next_puzzlehashes: List[bytes32], a_or_b, nonce: bytes32,
                                      offer_launcher_ids_to_inner_puzzlehashes: Dict[bytes32, bytes32],
                                      wallet_offers_to_assert: List[Tuple[bytes32, bytes32]]) -> SpendBundle:
         singleton_child: Coin = await get_unspent_singleton_coin(self.node_client, singleton_launcher_id)
@@ -547,30 +547,39 @@ class Fusion:
         full_puzzle: Program = puzzle_for_singleton(singleton_launcher_id, singleton_inner_puzzle)
         assert full_puzzle.get_tree_hash().hex() == singleton_child.puzzle_hash.hex()
 
-        nft_inner_puzzlehashes_to_lock = []
-        for launcher_id in nft_launcher_ids_to_lock:
-            nft_singleton_inner_puzzlehash = offer_launcher_ids_to_inner_puzzlehashes[launcher_id]
-            nft_inner_puzzlehashes_to_lock.append(nft_singleton_inner_puzzlehash)
+        ### FIXME - can probably refactor out all the inner puzzlehash stuff
+        # nft_inner_puzzlehashes_to_lock = []
+        # for launcher_id in nft_launcher_ids_to_lock:
+        #     nft_singleton_inner_puzzlehash = offer_launcher_ids_to_inner_puzzlehashes[launcher_id]
+        #     nft_inner_puzzlehashes_to_lock.append(nft_singleton_inner_puzzlehash)
 
-        nft_inner_puzzlehashes_to_release = []
-        for launcher_id in nft_launcher_ids_to_release:
-            nft_singleton_inner_puzzlehash = offer_launcher_ids_to_inner_puzzlehashes[launcher_id]
-            nft_inner_puzzlehashes_to_release.append(nft_singleton_inner_puzzlehash)
+        # nft_inner_puzzlehashes_to_release = []
+        # for launcher_id in nft_launcher_ids_to_release:
+        #     nft_singleton_inner_puzzlehash = offer_launcher_ids_to_inner_puzzlehashes[launcher_id]
+        #     nft_inner_puzzlehashes_to_release.append(nft_singleton_inner_puzzlehash)
 
-        logger.info(f"Size of nft_inner_puzzlehashes_to_lock: {len(nft_inner_puzzlehashes_to_lock)}, size of nft_inner_puzzlehashes_to_release: {len(nft_inner_puzzlehashes_to_release)}")
+        # logger.info(f"Size of nft_inner_puzzlehashes_to_lock: {len(nft_inner_puzzlehashes_to_lock)}, size of nft_inner_puzzlehashes_to_release: {len(nft_inner_puzzlehashes_to_release)}")
 
-        # (coin_id nft_metadata_hash nft_did nft_transfer_program_hash inner_puzzlehash target_inner_puzzlehash)
+        p2_singleton = self.pay_to_singleton_puzzle(singleton_launcher_id)
+        p2_puzzlehash = p2_singleton.get_tree_hash()
 
-        nfts_to_lock = [[9,8,7,6,5,4], [3,4,5,6,7,8]] #completely made up for testing
-        nfts_to_unlock = [[1,2,3,4,5,6]]
+        nfts_to_lock = []
+        for coin_id in nft_coin_ids_to_lock:
+            i = 0
+            nfts_to_lock.append(await self.lookup_nft_coin_details(nft_launcher_ids_to_lock[i], coin_id, p2_puzzlehash))
+            i += 1
+
+        nfts_to_unlock = []
+        for coin_id in nft_coin_ids_to_unlock:
+            i = 0
+            nfts_to_unlock.append(await self.lookup_nft_coin_details(nft_launcher_ids_to_unlock[i], coin_id, nft_next_puzzlehashes[i]))
+            i += 1
 
         inner_solution: Program = Program.to([
             singleton_child.name(), singleton_inner_puzzle.get_tree_hash(),
             nfts_to_lock, nfts_to_unlock,
             a_or_b, nonce])
         
-        logger.warning(inner_solution)
-
         lineage_proof: LineageProof = lineage_proof_for_coinsol(singleton_coinsol)
         assert full_puzzle.get_tree_hash() == singleton_child.puzzle_hash
 
@@ -590,6 +599,28 @@ class Fusion:
                                               self.get_synthetic_private_key_for_puzzle_hash,
                                 AGG_SIG_ME_ADDITIONAL_DATA, MAX_BLOCK_COST_CLVM, [puzzle_hash_for_synthetic_public_key])
         return spend_bundle
+
+
+    # lookup_nft_coin_details
+    # (coin_id nft_metadata_hash nft_did nft_transfer_program_hash target_inner_puzzlehash)
+    async def lookup_nft_coin_details(self, launcher_id, coin_id, target_inner_puzzlehash):
+        
+        nft_coin_record: CoinRecord = await self.node_client.get_coin_record_by_name(coin_id)
+
+        logger.debug(f"Coin with ID: {nft_coin_record.coin.name().hex()} has full puzzlehash: {nft_coin_record.coin.puzzle_hash.hex()}")
+
+        parent_coin_record: CoinRecord = await self.node_client.get_coin_record_by_name(nft_coin_record.coin.parent_coin_info)
+        assert parent_coin_record is not None
+        puzzle_and_solution: CoinSpend = await self.node_client.get_puzzle_and_solution(
+            coin_id=nft_coin_record.coin.parent_coin_info, height=parent_coin_record.spent_block_index)
+
+        nft_program = Program.from_bytes(bytes(puzzle_and_solution.puzzle_reveal))
+        unft = UncurriedNFT.uncurry(*nft_program.uncurry())
+        details = [coin_id, unft.metadata.get_tree_hash(), unft.owner_did, unft.transfer_program.get_tree_hash(), target_inner_puzzlehash]
+
+        logger.debug(f"Full puzzlehash at OFFER_MOD will be {(await self.full_puzzle_for_p2_puzzle(launcher_id, OFFER_MOD)).get_tree_hash()}")
+
+        return details
 
  
     async def find_unspent_descendant(self, coin_record: CoinRecord) -> CoinRecord:
@@ -719,7 +750,7 @@ class Fusion:
             meta_hash=meta_hash_param,
             meta_uris=[f"https://example.com/meta/{suffix}"],
             tx_config=tx_config,
-            did_id=None,
+            did_id=did_id,
         )
         assert res.get("success")
 
