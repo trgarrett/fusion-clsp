@@ -464,8 +464,7 @@ class Fusion:
     async def create_offer_a_for_b_as_spend_bundle(self, nonce: bytes32, p2_singleton: Program,
                                                    a_launcher_ids: List[bytes32], b_launcher_ids: List[bytes32],
                                                    singleton_launcher_id, singleton_coin_id: bytes32, singleton_inner_puzzle: Program,
-                                                   nft_next_puzzlehashes: List[bytes32], offer_launcher_ids_to_inner_puzzlehashes: Dict[bytes32, bytes32],
-                                                   wallet_offers_to_assert: List[Tuple[bytes32, bytes32]]) -> SpendBundle:
+                                                   nft_next_puzzlehashes: List[bytes32]) -> SpendBundle:
         spend_bundles = []
 
         release_coin_ids: List[bytes32] = []
@@ -484,14 +483,12 @@ class Fusion:
             coin_record = await self.find_unspent_descendant(coin_record)
             a_spend_bundle = await self.make_transfer_nft_p2_spend_bundle(singleton_inner_puzzle, singleton_coin_id, a_launcher_id, p2_singleton, OFFER_MOD_HASH)
             spend_bundles.append(a_spend_bundle)
-            offer_spend_bundle, nft_singleton_inner_puzzlehash = await self.make_accept_offer_nft_spend_bundle(a_spend_bundle.coin_spends[0], nonce, a_launcher_id, OFFER_MOD, nft_next_puzzlehashes[i])
-            offer_launcher_ids_to_inner_puzzlehashes[a_launcher_id] = nft_singleton_inner_puzzlehash
+            offer_spend_bundle, _ = await self.make_accept_offer_nft_spend_bundle(a_spend_bundle.coin_spends[0], nonce, a_launcher_id, OFFER_MOD, nft_next_puzzlehashes[i])
             spend_bundles.append(offer_spend_bundle)
             i += 1
 
         spend_bundles.append(await self.make_swap_spend_bundle(singleton_launcher_id, singleton_inner_puzzle, lock_coin_ids, b_launcher_ids,
-                                                               release_coin_ids, a_launcher_ids, nft_next_puzzlehashes, 'a', nonce,
-                                                               offer_launcher_ids_to_inner_puzzlehashes, wallet_offers_to_assert))
+                                                               release_coin_ids, a_launcher_ids, nft_next_puzzlehashes, 'a', nonce))
         spend_bundle = SpendBundle.aggregate(spend_bundles)
         return spend_bundle
 
@@ -500,8 +497,7 @@ class Fusion:
     async def create_offer_b_for_a_as_spend_bundle(self, nonce: bytes32, p2_singleton: Program,
                                                    a_launcher_ids: List[bytes32], b_launcher_ids: List[bytes32],
                                                    singleton_launcher_id, singleton_coin_id: bytes32, singleton_inner_puzzle: Program,
-                                                   nft_next_puzzlehashes: List[bytes32], offer_launcher_ids_to_inner_puzzlehashes: Dict[bytes32, bytes32],
-                                                   wallet_offers_to_assert: List[Tuple[bytes32, bytes32]]) -> SpendBundle:
+                                                   nft_next_puzzlehashes: List[bytes32]) -> SpendBundle:
         spend_bundles = []
 
         release_coin_ids: List[bytes32] = []
@@ -520,14 +516,12 @@ class Fusion:
             coin_record = await self.find_unspent_descendant(coin_record)
             b_spend_bundle = await self.make_transfer_nft_p2_spend_bundle(singleton_inner_puzzle, singleton_coin_id, b_launcher_id, p2_singleton, OFFER_MOD_HASH)
             spend_bundles.append(b_spend_bundle)
-            offer_spend_bundle, nft_singleton_inner_puzzlehash = await self.make_accept_offer_nft_spend_bundle(b_spend_bundle.coin_spends[0], nonce, b_launcher_id, OFFER_MOD, nft_next_puzzlehashes[i])
-            offer_launcher_ids_to_inner_puzzlehashes[b_launcher_id] = nft_singleton_inner_puzzlehash
+            offer_spend_bundle, _ = await self.make_accept_offer_nft_spend_bundle(b_spend_bundle.coin_spends[0], nonce, b_launcher_id, OFFER_MOD, nft_next_puzzlehashes[i])
             spend_bundles.append(offer_spend_bundle)
             i += 1
 
         spend_bundles.append(await self.make_swap_spend_bundle(singleton_launcher_id, singleton_inner_puzzle, lock_coin_ids, a_launcher_ids,
-                                                               release_coin_ids, b_launcher_ids, nft_next_puzzlehashes, 'b', nonce,
-                                                               offer_launcher_ids_to_inner_puzzlehashes, wallet_offers_to_assert))
+                                                               release_coin_ids, b_launcher_ids, nft_next_puzzlehashes, 'b', nonce))
         spend_bundle = SpendBundle.aggregate(spend_bundles)
         return spend_bundle
     
@@ -536,32 +530,15 @@ class Fusion:
     async def make_swap_spend_bundle(self, singleton_launcher_id, singleton_inner_puzzle,
                                      nft_coin_ids_to_lock: List[bytes32], nft_launcher_ids_to_lock,
                                      nft_coin_ids_to_unlock: List[bytes32], nft_launcher_ids_to_unlock,
-                                     nft_next_puzzlehashes: List[bytes32], a_or_b, nonce: bytes32,
-                                     offer_launcher_ids_to_inner_puzzlehashes: Dict[bytes32, bytes32],
-                                     wallet_offers_to_assert: List[Tuple[bytes32, bytes32]]) -> SpendBundle:
+                                     nft_next_puzzlehashes: List[bytes32], a_or_b, nonce: bytes32) -> SpendBundle:
         singleton_child: Coin = await get_unspent_singleton_coin(self.node_client, singleton_launcher_id)
         logger.info(f"make_swap_spend_bundle for singleton: {singleton_child.name().hex()}")
-        logger.info(f"offer_launcher_ids_to_inner_puzzlehashes is size: {len(offer_launcher_ids_to_inner_puzzlehashes)}")
-        logger.debug(offer_launcher_ids_to_inner_puzzlehashes)
         singleton_parent_record: CoinRecord = await self.node_client.get_coin_record_by_name(singleton_child.parent_coin_info)
         singleton_coinsol: CoinSpend = await self.node_client.get_puzzle_and_solution(singleton_parent_record.coin.name(),
                                                                                 singleton_parent_record.spent_block_index)
 
         full_puzzle: Program = puzzle_for_singleton(singleton_launcher_id, singleton_inner_puzzle)
         assert full_puzzle.get_tree_hash().hex() == singleton_child.puzzle_hash.hex()
-
-        ### FIXME - can probably refactor out all the inner puzzlehash stuff
-        # nft_inner_puzzlehashes_to_lock = []
-        # for launcher_id in nft_launcher_ids_to_lock:
-        #     nft_singleton_inner_puzzlehash = offer_launcher_ids_to_inner_puzzlehashes[launcher_id]
-        #     nft_inner_puzzlehashes_to_lock.append(nft_singleton_inner_puzzlehash)
-
-        # nft_inner_puzzlehashes_to_release = []
-        # for launcher_id in nft_launcher_ids_to_release:
-        #     nft_singleton_inner_puzzlehash = offer_launcher_ids_to_inner_puzzlehashes[launcher_id]
-        #     nft_inner_puzzlehashes_to_release.append(nft_singleton_inner_puzzlehash)
-
-        # logger.info(f"Size of nft_inner_puzzlehashes_to_lock: {len(nft_inner_puzzlehashes_to_lock)}, size of nft_inner_puzzlehashes_to_release: {len(nft_inner_puzzlehashes_to_release)}")
 
         nfts_to_lock = []
         for coin_id in nft_coin_ids_to_lock:
@@ -621,6 +598,7 @@ class Fusion:
 
         info = NFTInfo.from_json_dict((await self.wallet_client.get_nft_info(coin_id.hex()))["nft_info"])
 
+        # unft insists on giving us a None owner_did... Need info too for now
         details = [coin_id, unft.metadata.get_tree_hash(), info.owner_did, unft.transfer_program.get_tree_hash()]
         logger.debug(f"Details: [{coin_id.hex()}, {unft.metadata.get_tree_hash()}, {info.owner_did.hex()}, {unft.transfer_program.get_tree_hash()}]")
 
@@ -662,11 +640,6 @@ class Fusion:
         p2_singleton = self.pay_to_singleton_puzzle(launcher_id)
         p2_puzzlehash = p2_singleton.get_tree_hash()
 
-        #SINGLETON_STRUCT ; my singleton_struct, formerly a Truth - ((SINGLETON_MOD_HASH, (LAUNCHER_ID, LAUNCHER_PUZZLE_HASH)))
-        #P2_SINGLETON_PUZZLE_HASH ; the puzzle hash for the singleton's pay to singleton puzzle
-        #OFFER_MOD_HASH ; the puzzle hash of the standard offer puzzle
-        #NFT_A_LAUNCHER_IDS ; commitment to one side of the swap pair, LIST of launcher coin IDs
-        #NFT_B_LAUNCHER_IDS ; commitment to the other side of a swap pair, LIST of launcher coin IDs
         singleton_struct = (SINGLETON_MOD_HASH, (launcher_id, SINGLETON_LAUNCHER_HASH))
         inner_puzzle: Program = SINGLETON_INNER.curry(singleton_struct, p2_puzzlehash,
                                                       OFFER_MOD_HASH, NFT_STATE_LAYER_MOD_HASH, NFT_OWNERSHIP_LAYER_HASH, NFT_METADATA_UPDATER_PUZZLE_HASH_HASH,
@@ -919,22 +892,18 @@ class Fusion:
         a_matches: bool = False
         b_matches: bool = False
 
-        offer_launcher_ids_to_inner_puzzlehashes: Dict[bytes32, bytes32] = {}
-
         for spend in user_offer_spend_bundle.coin_spends:
             nft_program = Program.from_bytes(bytes(spend.puzzle_reveal))
             unft = UncurriedNFT.uncurry(*nft_program.uncurry())
             if unft is not None and unft.singleton_launcher_id in b_ids:
                 b_launcher_id = unft.singleton_launcher_id
-                accept_offer_spend_bundle, nft_singleton_inner_puzzlehash = await self.make_accept_offer_nft_spend_bundle(spend, nonce, b_launcher_id, OFFER_MOD, p2_singleton.get_tree_hash())
-                offer_launcher_ids_to_inner_puzzlehashes[b_launcher_id] = nft_singleton_inner_puzzlehash
+                accept_offer_spend_bundle, _ = await self.make_accept_offer_nft_spend_bundle(spend, nonce, b_launcher_id, OFFER_MOD, p2_singleton.get_tree_hash())
                 offers_spend_bundle = SpendBundle.aggregate([offers_spend_bundle, accept_offer_spend_bundle])
                 logger.info("User offer presents B (fusion)")
                 b_matches = True
             elif unft is not None and unft.singleton_launcher_id in a_ids:
                 a_launcher_id = unft.singleton_launcher_id
-                accept_offer_spend_bundle, nft_singleton_inner_puzzlehash = await self.make_accept_offer_nft_spend_bundle(spend, nonce, a_launcher_id, OFFER_MOD, p2_singleton.get_tree_hash())
-                offer_launcher_ids_to_inner_puzzlehashes[a_launcher_id] = nft_singleton_inner_puzzlehash
+                accept_offer_spend_bundle, _ = await self.make_accept_offer_nft_spend_bundle(spend, nonce, a_launcher_id, OFFER_MOD, p2_singleton.get_tree_hash())
                 offers_spend_bundle = SpendBundle.aggregate([offers_spend_bundle, accept_offer_spend_bundle])
                 a_matches = True
                 logger.info("User offer presents A (defusion)")
@@ -955,10 +924,10 @@ class Fusion:
         spend_bundle2 = None
         if b_matches: #fusion
             spend_bundle2 = await self.create_offer_a_for_b_as_spend_bundle(nonce, p2_singleton, a_ids, b_ids, launcher_id, singleton_coin_record.coin.name(),
-                                                                            singleton_inner_puzzle, nft_next_puzzlehashes, offer_launcher_ids_to_inner_puzzlehashes, [])
+                                                                            singleton_inner_puzzle, nft_next_puzzlehashes)
         elif a_matches: #defusion
             spend_bundle2 = await self.create_offer_b_for_a_as_spend_bundle(nonce, p2_singleton, a_ids, b_ids, launcher_id, singleton_coin_record.coin.name(),
-                                                                            singleton_inner_puzzle, nft_next_puzzlehashes, offer_launcher_ids_to_inner_puzzlehashes, [])
+                                                                            singleton_inner_puzzle, nft_next_puzzlehashes)
 
         spend_bundle = SpendBundle.aggregate([user_offer_spend_bundle, offers_spend_bundle, spend_bundle2])
 
