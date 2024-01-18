@@ -98,9 +98,9 @@ class TestNftUpgrade:
             wallet_client = fusion.wallet_client
             node_client = fusion.node_client
 
-            did_one_id, _ = await fusion.create_did()
-            did_two_id, _ = await fusion.create_did()
-            did_three_id, _ = await fusion.create_did()
+            did_one_id, did_one_id_bytes = await fusion.create_did()
+            did_two_id, did_two_id_bytes = await fusion.create_did()
+            did_three_id, did_three_id_bytes = await fusion.create_did()
 
             # make simulated NFTs and send to primary address of wallet
             primary_puzzle = puzzle_for_pk(wallet_keys[0].get_g1())
@@ -111,7 +111,7 @@ class TestNftUpgrade:
             nft_a_coin_record = await fusion.wait_for_coin_record(nft_a_launcher_id)
             nft_b1_launcher_id = await fusion.mint_nft(did_two_id, primary_puzzlehash, 'B1')
             nft_b2_launcher_id = await fusion.mint_nft(did_three_id, primary_puzzlehash, 'B2')
-            
+
             nft_a_coin_record: CoinRecord = await fusion.wait_for_coin_record(nft_a_launcher_id)
             nft_b1_coin_record: CoinRecord = await fusion.wait_for_coin_record(nft_b1_launcher_id)
             nft_b2_coin_record: CoinRecord = await fusion.wait_for_coin_record(nft_b2_launcher_id)
@@ -133,7 +133,7 @@ class TestNftUpgrade:
             # transfer A to P2
             nft_a_coin_id = (await fusion.find_unspent_descendant(nft_a_coin_record)).coin.name()
             logger.info(f"Locking A into p2 (coin id {nft_a_coin_id.hex()})")
-            (a_spend_bundle, _) = await fusion.make_transfer_nft_spend_bundle(nft_a_launcher_id, p2_puzzlehash)
+            (a_spend_bundle, _) = await fusion.make_transfer_nft_spend_bundle(nft_a_launcher_id, p2_puzzlehash, did_one_id_bytes)
             status = await node_client.push_tx(a_spend_bundle)
             # make sure A is visible in p2 before we move further
             await self.wait_for_coin_spent(node_client, a_spend_bundle.coin_spends[0].coin.name())
@@ -144,6 +144,7 @@ class TestNftUpgrade:
             offer: Offer = await self.make_offer_b_for_a(fusion, nft_a_launcher_id,
                                                          [(nft_b1_launcher_id, nft_b1_coin_record),
                                                           (nft_b2_launcher_id, nft_b2_coin_record)],
+                                                          [did_two_id_bytes, did_three_id_bytes],
                                                           primary_puzzlehash)
             logger.info(f"Offer\n\t{offer.to_bech32()}")
 
@@ -185,7 +186,7 @@ class TestNftUpgrade:
             # complete the roundtrip by defusing and trading A back for B1 and B2
             logger.info("Beginning defusion flow...")
 
-            offer: Offer = await self.make_offer_a_for_b(fusion, nft_a_launcher_id, nft_a_coin_record,
+            offer: Offer = await self.make_offer_a_for_b(fusion, nft_a_launcher_id, nft_a_coin_record, did_one_id_bytes,
                                                          [(nft_b1_launcher_id, nft_b1_coin_record),
                                                           (nft_b2_launcher_id, nft_b2_coin_record)],
                                                           primary_puzzlehash)
@@ -226,7 +227,7 @@ class TestNftUpgrade:
 
 
     async def make_offer_b_for_a(self, fusion, nft_a_launcher_id: bytes32,
-                                 b_coins: List[Tuple[bytes32, CoinRecord]],
+                                 b_coins: List[Tuple[bytes32, CoinRecord]], b_dids: List[bytes32],
                                  nft_next_puzzlehash: bytes32) -> Offer:
         driver_dict: Dict[bytes32, PuzzleInfo] = {}
         driver_dict[nft_a_launcher_id] = await self.get_puzzle_info(fusion, nft_a_launcher_id)
@@ -242,8 +243,8 @@ class TestNftUpgrade:
         requested_payments[nft_a_launcher_id] = [Payment(nft_next_puzzlehash, 1, [nft_next_puzzlehash])]
 
         notarized_payments = Offer.notarize_payments(requested_payments, [nft_b1_coin_record.coin, nft_b2_coin_record.coin])
-        spend_bundle_b1, _ = await fusion.make_transfer_nft_spend_bundle(nft_b1_launcher_id, OFFER_MOD_HASH)
-        spend_bundle_b2, _ = await fusion.make_transfer_nft_spend_bundle(nft_b2_launcher_id, OFFER_MOD_HASH)
+        spend_bundle_b1, _ = await fusion.make_transfer_nft_spend_bundle(nft_b1_launcher_id, OFFER_MOD_HASH, b_dids[0])
+        spend_bundle_b2, _ = await fusion.make_transfer_nft_spend_bundle(nft_b2_launcher_id, OFFER_MOD_HASH, b_dids[1])
 
         spend_bundle: SpendBundle = SpendBundle.aggregate([spend_bundle_b1, spend_bundle_b2])
 
@@ -251,7 +252,7 @@ class TestNftUpgrade:
         return offer
     
 
-    async def make_offer_a_for_b(self, fusion, nft_a_launcher_id: bytes32, nft_a_coin_record: CoinRecord,
+    async def make_offer_a_for_b(self, fusion, nft_a_launcher_id: bytes32, nft_a_coin_record: CoinRecord, nft_a_did,
                                  b_coins: List[Tuple[bytes32, CoinRecord]],
                                  nft_next_puzzlehash: bytes32) -> Offer:
         driver_dict: Dict[bytes32, PuzzleInfo] = {}
@@ -268,7 +269,7 @@ class TestNftUpgrade:
         requested_payments[nft_b2_launcher_id] = [Payment(nft_next_puzzlehash, 1, [nft_next_puzzlehash])]
 
         notarized_payments = Offer.notarize_payments(requested_payments, [nft_a_coin_record.coin])
-        spend_bundle_a, _ = await fusion.make_transfer_nft_spend_bundle(nft_a_launcher_id, OFFER_MOD_HASH)
+        spend_bundle_a, _ = await fusion.make_transfer_nft_spend_bundle(nft_a_launcher_id, OFFER_MOD_HASH, nft_a_did)
 
         offer: Offer = Offer(notarized_payments, spend_bundle_a, driver_dict)
         return offer

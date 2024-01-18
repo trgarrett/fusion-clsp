@@ -269,11 +269,11 @@ class Fusion:
 
     
     async def nft_singleton_inner_puzzle_for_p2_puzzle_and_spend(self, coin_spend: CoinSpend, inner_puzzle: Program) -> Program:
-        nft_inner_puzzle: Program = await self.nft_inner_puzzle_from_spend(coin_spend, inner_puzzle)
         parent_puzzle_reveal = coin_spend.puzzle_reveal
         nft_program = Program.from_bytes(bytes(parent_puzzle_reveal))
         unft = UncurriedNFT.uncurry(*nft_program.uncurry())
 
+        nft_inner_puzzle: Program = await self.nft_inner_puzzle_from_spend(coin_spend, inner_puzzle)
         nft_singleton_inner_puzzle = create_nft_layer_puzzle_with_curry_params(unft.metadata, unft.metadata_updater_hash, nft_inner_puzzle)
         return nft_singleton_inner_puzzle
     
@@ -299,7 +299,7 @@ class Fusion:
 
 
     # transfer an NFT, held by the wallet for this app, to a new destination
-    async def make_transfer_nft_spend_bundle(self, nft_launcher_id: bytes32, recipient_puzzlehash: bytes32) -> Tuple[SpendBundle, bytes32]:
+    async def make_transfer_nft_spend_bundle(self, nft_launcher_id: bytes32, recipient_puzzlehash: bytes32, owner_did: None) -> Tuple[SpendBundle, bytes32]:
         logger.info(f"Transferring NFT {encode_puzzle_hash(nft_launcher_id, 'nft')} to {encode_puzzle_hash(recipient_puzzlehash, PREFIX)}")
 
         nft_launcher_coin_record = await self.node_client.get_coin_record_by_name(nft_launcher_id)
@@ -324,12 +324,15 @@ class Fusion:
             primaries=primaries,
             fee=0 #TODO FIXME - add fee and change logic
         )
+
+        if owner_did is None:
+            logger.warning("Supplied owner DID is None. This may or may not be expected. Check your inputs!")
         
         if unft is not None:
             lineage_proof = LineageProof(parent_coin_record.coin.parent_coin_info, parent_inner_puzzlehash, 1)
             magic_condition = None
             if unft.supports_did:
-                magic_condition = Program.to([-10, None, [], None])
+                magic_condition = Program.to([-10, unft.owner_did, [], None])
             if magic_condition:
                 innersol = Program.to(innersol)
             if unft.supports_did:
@@ -601,7 +604,6 @@ class Fusion:
     # lookup_nft_coin_details
     # (coin_id nft_metadata_hash nft_did nft_transfer_program_hash target_inner_puzzlehash)
     async def lookup_nft_coin_details(self, launcher_id, coin_id, target_inner_puzzlehash=None):
-        
         nft_coin_record: CoinRecord = await self.node_client.get_coin_record_by_name(coin_id)
 
         logger.debug(f"Coin with ID: {nft_coin_record.coin.name().hex()} has full puzzlehash: {nft_coin_record.coin.puzzle_hash.hex()}")
@@ -613,12 +615,19 @@ class Fusion:
 
         nft_program = Program.from_bytes(bytes(puzzle_and_solution.puzzle_reveal))
         unft = UncurriedNFT.uncurry(*nft_program.uncurry())
-        details = [coin_id, unft.metadata.get_tree_hash(), unft.owner_did, unft.transfer_program.get_tree_hash()]
+
+        # Because fusion deals with provenance, going to just require this for now
+        assert unft.supports_did
+
+        info = NFTInfo.from_json_dict((await self.wallet_client.get_nft_info(coin_id.hex()))["nft_info"])
+
+        details = [coin_id, unft.metadata.get_tree_hash(), info.owner_did, unft.transfer_program.get_tree_hash()]
+        logger.debug(f"Details: [{coin_id.hex()}, {unft.metadata.get_tree_hash()}, {info.owner_did.hex()}, {unft.transfer_program.get_tree_hash()}]")
 
         if target_inner_puzzlehash is not None:
             details.append(target_inner_puzzlehash)
-
-        logger.debug(f"Full puzzlehash at OFFER_MOD will be {(await self.full_puzzle_for_p2_puzzle(launcher_id, OFFER_MOD)).get_tree_hash()}")
+        
+        logger.debug(f"puzzleshash at OFFER_MOD: {(await self.full_puzzle_for_p2_puzzle(launcher_id, OFFER_MOD)).get_tree_hash()}")
 
         return details
 
