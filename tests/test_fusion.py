@@ -118,7 +118,8 @@ class TestNftUpgrade:
 
             singleton_launcher_id = await fusion.cli_deploy_singleton(encode_puzzle_hash(nft_a_launcher_id, "nft"),
                                                                       encode_puzzle_hash(nft_b1_launcher_id, "nft") + ","
-                                                                      + encode_puzzle_hash(nft_b2_launcher_id, "nft"))
+                                                                      + encode_puzzle_hash(nft_b2_launcher_id, "nft"), 
+                                                                      fee_amount=50000)
             assert singleton_launcher_id is not None
 
             p2_singleton = fusion.pay_to_singleton_puzzle(singleton_launcher_id)
@@ -155,7 +156,7 @@ class TestNftUpgrade:
             assert offer_bundle_json is not None
             assert json.loads(offer_bundle_json) is not None
 
-            await fusion.swap(singleton_launcher_id, offer.to_bech32())
+            await fusion.swap(singleton_launcher_id, offer.to_bech32(), fee_amount=500000)
 
             # make sure first swap is visible on chain
             logger.info("Waiting for swapped coins to show as moved on chain")
