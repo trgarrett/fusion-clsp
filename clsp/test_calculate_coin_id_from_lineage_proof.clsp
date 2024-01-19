@@ -1,9 +1,0 @@
-(mod 
-   (
-       lineage_proof
-   )
-
-  (include utils.clib)
-
-  (calculate_coin_id_from_lineage_proof lineage_proof)
-)

@@ -1,0 +1,25 @@
+SINGLETON_TOP_LAYER_MOD
+ - SINGLETON_STRUCT
+    - singleton_mod_hash
+    - singleton_launcher_id
+    - launcher_puzhash
+ - inner_puzzle: NFT_STATE_LAYER_MOD
+    - NFT_STATE_LAYER_MOD_HASH
+    - metadata
+        - data_uris (u)
+        - data_hash (h)
+        - meta_uris (mu)
+        - meta_hash (mh)
+        - license_uris (lu)
+        - license_hash (lh)
+        - edition_number (sn)
+        - edition_total (st)
+    - metadata_updater_puzzle_hash
+    - inner_puzzle: NFT_OWNERSHIP_LAYER !OR! p2_puzzle; ONLY if NFT_OWNERSHIP_LAYER:
+        - NFT_OWNERSHIP_LAYER_HASH
+        - current_owner (did)
+        - transfer_program
+            - singleton_struct
+            - royalty_address = royalty_address_p.atom
+            - royalty_percentage
+        - inner_puzzle: p2_puzzle

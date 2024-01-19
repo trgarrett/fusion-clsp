@@ -1,109 +1,102 @@
 import pytest
-import pytest_asyncio
 
 from chia.consensus.default_constants import DEFAULT_CONSTANTS
 MAX_BLOCK_COST_CLVM = DEFAULT_CONSTANTS.MAX_BLOCK_COST_CLVM
 
 from chia.types.blockchain_format.program import Program
 from chia.types.blockchain_format.sized_bytes import bytes32
-from chia.util.ints import uint64
+from chia.wallet.nft_wallet.nft_puzzles import (
+    NFT_METADATA_UPDATER,
+    NFT_STATE_LAYER_MOD_HASH, NFT_OWNERSHIP_LAYER_HASH
+)
 from chia.wallet.puzzles.load_clvm import load_clvm
+from chia.wallet.puzzles.singleton_top_layer_v1_1 import (
+    SINGLETON_LAUNCHER_HASH,
+    SINGLETON_MOD_HASH
+)
 
-CALCULATE_COIN_ID_FROM_LINEAGE_PROOF_MOD: Program = load_clvm("test_calculate_coin_id_from_lineage_proof.clsp", package_or_requirement="clsp", recompile=True)
+PREPEND_ENTRIES_MOD: Program = load_clvm("test_prepend_entries_to_lists.clsp", package_or_requirement="clsp", recompile=True)
 
-LIST_OF_PAIRS_MOD: Program = load_clvm("test_list_of_pairs.clsp", package_or_requirement="clsp", recompile=True)
+CALCULATE_NFT_FULL_PUZZLE_HASH_MOD: Program = load_clvm("test_calculate_nft_full_puzzle_hash.clsp", package_or_requirement="clsp", recompile=True)
+CALCULATE_NFT_OWNERSHIP_LAYER_PUZZLE_HASH_MOD: Program = load_clvm("test_calculate_nft_ownership_layer_puzzle_hash.clsp", package_or_requirement="clsp", recompile=True)
+
+NFT_METADATA_UPDATER_PUZZLE_HASH: bytes32 = NFT_METADATA_UPDATER.get_tree_hash()
+NFT_METADATA_UPDATER_PUZZLE_HASH_HASH: Program = Program.to(NFT_METADATA_UPDATER_PUZZLE_HASH).get_tree_hash()
 
 class TestNftUtils:
+    @pytest.mark.asyncio
+    async def test_calculate_nft_full_puzzle_hash(self):
+        # sanity check constants
+        assert bytes32.from_hexstr("0xfe8a4b4e27a2e29a4d3fc7ce9d527adbcaccbab6ada3903ccf3ba9a769d2d78b") == NFT_METADATA_UPDATER_PUZZLE_HASH
+        assert bytes32.from_hexstr("0x0d4e16e0415e44257c623e20c571a7755f76d8f0088b1e6cc71de67418a14689").hex() == NFT_METADATA_UPDATER_PUZZLE_HASH_HASH.hex()
+        assert bytes32.from_hexstr("0xa04d9f57764f54a43e4030befb4d80026e870519aaa66334aef8304f5d0393c2").hex() == NFT_STATE_LAYER_MOD_HASH.hex()
+
+        # using NFT from mainnet
+        result: Program = CALCULATE_NFT_FULL_PUZZLE_HASH_MOD.run([
+            SINGLETON_MOD_HASH,
+            SINGLETON_LAUNCHER_HASH,
+            NFT_STATE_LAYER_MOD_HASH,
+            NFT_METADATA_UPDATER_PUZZLE_HASH_HASH, #METADATA_UPDATER_PUZZLE_HASH_HASH,
+            bytes32.from_hexstr("0xd9eb1eb2bd59d44e937e44dbfd9d70f8c593893eae1f86e363764401fa58d802"), #launcher ID
+            bytes32.from_hexstr("0x20cb70ba71c2eb58e23b163331909b28f5b105418799bf1637ae7ea10ea448d3"), #metadata hash
+            bytes32.from_hexstr("0x5bf47b4ac39c66c5fd2247a623acc22500254d2574d0b4496ec9ed36cd3c1847") # inner puzzlehash
+        ])
+        expected: Program = Program.to(bytes32.from_hexstr("0xff6290d44d3de87d1532e31aec99f9afbf3c3a6e25106357c876691f838ee4ea"))
+        assert expected == result
 
     @pytest.mark.asyncio
-    async def test_calculate_coin_id_from_lineage_proof_nil(self):
-        with pytest.raises(ValueError):
-            nft_lineage_proof = []
-            CALCULATE_COIN_ID_FROM_LINEAGE_PROOF_MOD.run([nft_lineage_proof])
-            assert False # should be unreachable
+    async def test_calculate_nft_ownership_layer_puzzle_hash(self):
+        # using NFT from mainnet
+        result: Program = CALCULATE_NFT_OWNERSHIP_LAYER_PUZZLE_HASH_MOD.run([
+            NFT_OWNERSHIP_LAYER_HASH,
+            Program.to([]),  # current owner
+            bytes32.from_hexstr("0x3a4029c2fbca8c96c74512442d479ae7648d9d2bbba0123bb231c55598bb7ea5"), # transfer program hash
+            bytes32.from_hexstr("0xb47861cfd1ec8e722283e6758fefdb9a23e3f36cb10d7a6778b47a17061a5dbb") # inner puzzlehash
+        ])
+        expected: Program = Program.to(bytes32.from_hexstr("0x5bf47b4ac39c66c5fd2247a623acc22500254d2574d0b4496ec9ed36cd3c1847"))
+        assert expected == result
 
     @pytest.mark.asyncio
-    async def test_calculate_coin_id_from_lineage_proof_one(self):
-        nft_lineage_proof = [
-            bytes32.from_hexstr("0x0d5b5e3c559b2256780630018887e089a174ef0e6a085dd1ff4e019901f22a38"),
-        ]
-        coin_id: Program = CALCULATE_COIN_ID_FROM_LINEAGE_PROOF_MOD.run([nft_lineage_proof])
-        assert bytes32.from_hexstr("0x0d5b5e3c559b2256780630018887e089a174ef0e6a085dd1ff4e019901f22a38") == bytes32.from_bytes(coin_id.as_python())
+    async def test_calculate_nft_ownership_layer_puzzle_hash_2(self):
+        # using NFT that was problematic for troubleshooting in simulator
+        result: Program = CALCULATE_NFT_OWNERSHIP_LAYER_PUZZLE_HASH_MOD.run([
+            NFT_OWNERSHIP_LAYER_HASH,
+            Program.to(bytes32.from_hexstr("0xdd44ce3a68d5efe4bd1981979c2bcb906405a494952286710627d241f07c61b0")),  # current owner
+            bytes32.from_hexstr("0xf47061827ce4ef4d5d7ae537695133a34b62a53353a865db0b09061288af29bd"), # transfer program hash
+            bytes32.from_hexstr("0x556c22e6a209998508e330da1a25b0cf786a0b42055bf3eaf0d45ec900b45c02") # inner puzzlehash
+        ])
+        expected: Program = Program.to(bytes32.from_hexstr("3fee3a5f1c7c83207c98b35203fa4a2e8775ade3746d3022aa02fdd9a1fe8393"))
+        assert expected == result
 
     @pytest.mark.asyncio
-    async def test_calculate_coin_id_from_lineage_proof_two(self):
-        nft_lineage_proof = [
-            bytes32.from_hexstr("0x0d5b5e3c559b2256780630018887e089a174ef0e6a085dd1ff4e019901f22a38"),
-            bytes32.from_hexstr("0xeb788d47494e49eff9a83eb808dfbb0665004b59f0c27116e56c8ec824d2857d"),
-        ]
-        coin_id: Program = CALCULATE_COIN_ID_FROM_LINEAGE_PROOF_MOD.run([nft_lineage_proof])
-        assert bytes32.from_hexstr("0x9bc5d0b9e5e7c8cea610d376a9860a98bcd42e4e785e22bb04941060b3574750") == bytes32.from_bytes(coin_id.as_python())
-
-    @pytest.mark.asyncio
-    async def test_calculate_coin_id_from_lineage_proof_three(self):
-        nft_lineage_proof = [
-            bytes32.from_hexstr("0x0d5b5e3c559b2256780630018887e089a174ef0e6a085dd1ff4e019901f22a38"),
-            bytes32.from_hexstr("0xeb788d47494e49eff9a83eb808dfbb0665004b59f0c27116e56c8ec824d2857d"),
-            bytes32.from_hexstr("0x9f20586c5c113cd50a5337ece5bd61c8e09a612cd3226de053742590706a181c")
-        ]
-        cost, coin_id = CALCULATE_COIN_ID_FROM_LINEAGE_PROOF_MOD.run_with_cost(MAX_BLOCK_COST_CLVM, [nft_lineage_proof])
-        assert bytes32.from_hexstr("0x45fc955335b98b98976a4d37583c6f0ac49d14b590eec349c6a7a5ed031e8409") == bytes32.from_bytes(coin_id.as_python())
-        assert 13193 == cost
-
-
-    @pytest.mark.asyncio
-    async def test_calculate_coin_id_from_lineage_proof_deep(self):
-        nft_lineage_proof = [
-            bytes32.from_hexstr("0x0d5b5e3c559b2256780630018887e089a174ef0e6a085dd1ff4e019901f22a38"),
-            bytes32.from_hexstr("0xeb788d47494e49eff9a83eb808dfbb0665004b59f0c27116e56c8ec824d2857d"),
-            bytes32.from_hexstr("0x9f20586c5c113cd50a5337ece5bd61c8e09a612cd3226de053742590706a181c"),
-            bytes32.from_hexstr("0xf7225388c1d69d57e6251c9fda50cbbf9e05131e5adb81e5aa0422402f048162"),
-            bytes32.from_hexstr("0xfcf8cbf5fe5706bb9a0c4c0d4e7699271e7ef2dc388c3cabdccee0e2d3408f28"),
-            bytes32.from_hexstr("0xce2baaf1ffe7720c04dd87b172d8cc8f302eb03bf691fe9c5cef901b9d8efdc4"),
-            bytes32.from_hexstr("0x46f8ba4f59e527ca1c0b5361e60e1e407e767a63549f8bfbd6ee02f59d527f09"),
-            bytes32.from_hexstr("0x91db805fad4ae4548866b0e0d2c6334ab044b6998f3f4c9672c47ccac136c094"),
-            bytes32.from_hexstr("0x3902c6db65948d3c2d65166a70353aab941531038e24bf8fbe6668b56655d8d7"),
-            bytes32.from_hexstr("0x06c4df81c2718d452ff7ed090a147080fd0b31ce39be1407135d0234292235b5"),
-            bytes32.from_hexstr("0xc3ad43f7cac9288db9db3a3efe24ecd35561b5e72323081af1ea48a197226c90"),
-            bytes32.from_hexstr("0xc5d2074163a236b086a8cc5498b3f5422d5d461a4bb18dcc51de1f0edf872094"),
-            bytes32.from_hexstr("0xce79b120c2488ce976dca3ae5423154b077779f797dd3c939e89c3a7567c5cc9"),
-            bytes32.from_hexstr("0x85a0dc13cd20f9c1a84068ac33d84f65877daea371dbe17b91c4361e4cfa29ed"),
-            bytes32.from_hexstr("0xded69c4d86cf37cfecf989f182dd4a43bf512173b545f2e4002f1eef183ef437"),
-            bytes32.from_hexstr("0x6ce0345db761567eb37512f9f5e1dc276dda1f07a7a2781cb4a825a83ef47686"),
-            bytes32.from_hexstr("0x88ec949304bdc7d8b4763fedaaa2e025b47fdbfe64095f7cd59da5b7bb08cf7b"),
-            bytes32.from_hexstr("0xf1a6ba2960ddaea5f747dd88e6cd9d447b352f730caa3b356cb24e51c1bd5dc6"),
-            bytes32.from_hexstr("0x21c9ff9c68f6c56a0847240a75cd153406c279623806f25057677e58de5c4a5e"),
-            bytes32.from_hexstr("0x7f9a02a81abc54518208366cdc41d6f6a85876a3645f7c3cf4f65e18b206e2e6"),
-            bytes32.from_hexstr("0x784dbe8702b13ddb67d8fb0249330490f3271a7824d1206cc700446458b118cf"),
-            bytes32.from_hexstr("0xf11dc364145183d4d735ffdf0fb3bb5ca8d6bdbc7aa15a567d12e239f0cd1d04"),
-            bytes32.from_hexstr("0x09a3922c7d10368c82e419d442af68d7bbb64f4fb009735d3d736091e73bb632")
-        ]
-        cost, coin_id = CALCULATE_COIN_ID_FROM_LINEAGE_PROOF_MOD.run_with_cost(MAX_BLOCK_COST_CLVM, [nft_lineage_proof])
-        assert bytes32.from_hexstr("0xbf85db16192d7725c257c4bff11c91c27e00e5a9c70104e2421b098e438ca5e1") == bytes32.from_bytes(coin_id.as_python())
-        assert 143453 == cost
-
-    @pytest.mark.asyncio
-    async def test_list_of_pairs_empty(self):
+    async def test_prepend_entries_to_lists_empty(self):
         l1 = []
         l2 = []
-        result: Program = LIST_OF_PAIRS_MOD.run([l1, l2])
+        result: Program = PREPEND_ENTRIES_MOD.run([l1, l2])
         expected: Program = Program.to([])
         assert expected == result
 
     @pytest.mark.asyncio
-    async def test_list_of_pairs_one(self):
+    async def test_prepend_entries_to_lists_unbalanced(self):
+        l1 = []
+        l2 = [1]
+        with pytest.raises(ValueError):
+            PREPEND_ENTRIES_MOD.run([l1, l2])
+
+    @pytest.mark.asyncio
+    async def test_prepend_entries_to_lists_one(self):
         l1 = [1]
         l2 = [2]
-        result: Program = LIST_OF_PAIRS_MOD.run([l1, l2])
-        expected: Program = Program.to([[1, 2]])
+        result: Program = PREPEND_ENTRIES_MOD.run([l1, l2])
+        expected: Program = Program.to([(1, 2)])
         assert expected == result
 
     @pytest.mark.asyncio
-    async def test_list_of_pairs_four(self):
+    async def test_prepend_entries_to_lists_four(self):
         l1 = [1, 2, 5, 9]
         l2 = [3, 4, 7, 11]
-        result: Program = LIST_OF_PAIRS_MOD.run([l1, l2])
-        expected: Program = Program.to([[1, 3], [2, 4], [5, 7], [9, 11]])
+        result: Program = PREPEND_ENTRIES_MOD.run([l1, l2])
+        expected: Program = Program.to([(1, 3), (2, 4), (5, 7), (9, 11)])
         assert expected == result
 
 
