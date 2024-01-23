@@ -80,6 +80,8 @@ logger = logging.getLogger()
 
 MAX_BLOCK_COST_CLVM = DEFAULT_CONSTANTS.MAX_BLOCK_COST_CLVM
 
+MAX_COIN_AMOUNT = DEFAULT_CONSTANTS.MAX_COIN_AMOUNT
+
 SINGLETON_AMOUNT = uint64(1)
 DERIVATIONS = int(os.environ.get('DERIVATIONS', 1000))
 
@@ -740,7 +742,7 @@ class Fusion:
         meta_hash_param = "0x2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
         address = encode_puzzle_hash(recipient_puzzlehash, prefix=PREFIX)
 
-        tx_config = TXConfig(min_coin_amount=1, max_coin_amount=9999999999999, excluded_coin_amounts=[], excluded_coin_ids=[], reuse_puzhash=True)
+        tx_config = TXConfig(min_coin_amount=1, max_coin_amount=MAX_COIN_AMOUNT, excluded_coin_amounts=[], excluded_coin_ids=[], reuse_puzhash=True)
 
         res = await wallet_client.mint_nft(
             wallet_id,
@@ -995,7 +997,7 @@ def puzzle_for_coin(coin: Coin) -> Program:
 
 async def select_coins(wallet_client: WalletRpcClient, amount: uint64):
     excluded_coin_ids = [c.name() for c in recent_coins]
-    coin_selection_config = CoinSelectionConfig(min_coin_amount=1, max_coin_amount=9999999999999, excluded_coin_amounts=[], excluded_coin_ids=excluded_coin_ids)
+    coin_selection_config = CoinSelectionConfig(min_coin_amount=1, max_coin_amount=MAX_COIN_AMOUNT, excluded_coin_amounts=[], excluded_coin_ids=excluded_coin_ids)
     coins: List[Coin] = await wallet_client.select_coins(amount=amount, wallet_id=1, coin_selection_config=coin_selection_config)
     logger.info(f'Selecting coins, will exclude {len(excluded_coin_ids)} coins recently spent')
     assert len(coins) >= 1
