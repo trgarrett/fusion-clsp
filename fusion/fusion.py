@@ -324,21 +324,22 @@ class Fusion:
             if unft.owner_did != info.owner_did:
                 logger.warning(f"DID mismatch in make_transfer_nft_spend_bundle ({encode_puzzle_hash(nft_launcher_id, 'nft')}): unft: {unft.owner_did.hex() if unft.owner_did is not None else None}, info: {info.owner_did.hex() if info.owner_did is not None else None}")
 
-            # conditions=(UnknownCondition
-            #                (opcode=Program.to(-10),
-            #                 args=[
-            #                     Program.to(info.owner_did),
-            #                     Program.to([]),
-            #                     Program.to(None),
-            #                 ]
-            #         ), )
+            conditions=(UnknownCondition
+                           (opcode=Program.to(-10),
+                            args=[
+                                Program.to(None), ###clear out DID when transferring
+                                Program.to([]),
+                                Program.to(None),
+                            ]
+                           )
+                       , )
 
             primaries = []
             primaries.append(Payment(recipient_puzzlehash, 1, [recipient_puzzlehash]))
             innersol = Wallet().make_solution(
                 primaries=primaries,
                 fee=fee_amount,
-                #conditions=conditions
+                conditions=conditions
             )
 
             logger.debug(f"innersol: {str(innersol)}")
@@ -642,7 +643,7 @@ class Fusion:
         if unft.owner_did != info.owner_did:
             logger.warning(f"DID mismatch in lookup_nft_coin_details ({encode_puzzle_hash(launcher_id, 'nft')}): unft: {unft.owner_did.hex() if unft.owner_did is not None else None}, info: {info.owner_did.hex() if info.owner_did is not None else None}")
 
-        details = [coin_id, unft.metadata.get_tree_hash(), info.owner_did, ###None
+        details = [coin_id, unft.metadata.get_tree_hash(), None, ###info.owner_did, ###None
                    unft.transfer_program.get_tree_hash()]
         logger.debug(f"Details: [{coin_id.hex()}, {unft.metadata.get_tree_hash()}, {info.owner_did}, {unft.transfer_program.get_tree_hash()}]")
 
