@@ -29,6 +29,7 @@ from chia.util.config import load_config
 from chia.util.default_root import DEFAULT_ROOT_PATH
 from chia.util.ints import uint16, uint64
 from chia.util.keychain import Keychain
+from chia.wallet.conditions import UnknownCondition
 from chia.wallet.derive_keys import master_sk_to_wallet_sk, master_sk_to_wallet_sk_unhardened
 from chia.wallet.lineage_proof import LineageProof
 from chia.wallet.nft_wallet.nft_info import NFTInfo
@@ -299,7 +300,7 @@ class Fusion:
 
 
     # transfer an NFT, held by the wallet for this app, to a new destination
-    async def make_transfer_nft_spend_bundle(self, nft_launcher_id: bytes32, recipient_puzzlehash: bytes32, owner_did: None, fee_amount:int=0) -> Tuple[SpendBundle, bytes32]:
+    async def make_transfer_nft_spend_bundle(self, nft_launcher_id: bytes32, recipient_puzzlehash: bytes32, fee_amount:int=0) -> Tuple[SpendBundle, bytes32]:
         logger.info(f"Transferring NFT {encode_puzzle_hash(nft_launcher_id, 'nft')} to {encode_puzzle_hash(recipient_puzzlehash, PREFIX)}")
 
         nft_launcher_coin_record = await self.node_client.get_coin_record_by_name(nft_launcher_id)
@@ -318,23 +319,31 @@ class Fusion:
         _, phs = nft_puzzles.get_metadata_and_phs(unft, puzzle_and_solution.solution)
         p2_puzzle = puzzle_reveals.get(phs)
 
-        primaries = []
-        primaries.append(Payment(recipient_puzzlehash, 1, [recipient_puzzlehash]))
-        innersol = Wallet().make_solution(
-            primaries=primaries,
-            fee=fee_amount
-        )
-
-        if owner_did is None:
-            logger.warning("Supplied owner DID is None. This may or may not be expected. Check your inputs!")
-        
         if unft is not None:
+            info = NFTInfo.from_json_dict((await self.wallet_client.get_nft_info(coin_record.name.hex()))["nft_info"])
+            if unft.owner_did != info.owner_did:
+                logger.warning(f"DID mismatch in make_transfer_nft_spend_bundle ({encode_puzzle_hash(nft_launcher_id, 'nft')}): unft: {unft.owner_did.hex() if unft.owner_did is not None else None}, info: {info.owner_did.hex() if info.owner_did is not None else None}")
+
+            # conditions=(UnknownCondition
+            #                (opcode=Program.to(-10),
+            #                 args=[
+            #                     Program.to(info.owner_did),
+            #                     Program.to([]),
+            #                     Program.to(None),
+            #                 ]
+            #         ), )
+
+            primaries = []
+            primaries.append(Payment(recipient_puzzlehash, 1, [recipient_puzzlehash]))
+            innersol = Wallet().make_solution(
+                primaries=primaries,
+                fee=fee_amount,
+                #conditions=conditions
+            )
+
+            logger.debug(f"innersol: {str(innersol)}")
+
             lineage_proof = LineageProof(parent_coin_record.coin.parent_coin_info, parent_inner_puzzlehash, 1)
-            magic_condition = None
-            if unft.supports_did:
-                magic_condition = Program.to([-10, unft.owner_did, [], None])
-            if magic_condition:
-                innersol = Program.to(innersol)
             if unft.supports_did:
                 innersol = Program.to([innersol])
 
@@ -357,6 +366,10 @@ class Fusion:
             nft_spend_bundle = await sign_coin_spends([coin_spend], wallet_keyf, 
                                     self.get_synthetic_private_key_for_puzzle_hash, 
                                     AGG_SIG_ME_ADDITIONAL_DATA, MAX_BLOCK_COST_CLVM, [puzzle_hash_for_synthetic_public_key])
+
+            if logger.isEnabledFor(logging.DEBUG):
+                with open(f"./spend.json", "w") as f:
+                    f.write(json.dumps(nft_spend_bundle.to_json_dict()))
 
             return nft_spend_bundle, inner_puzzle.get_tree_hash()
         else:
@@ -386,7 +399,12 @@ class Fusion:
         innersol = None
 
         if unft is not None:
-            nft_ownership_puzzle: Program = create_ownership_layer_puzzle(nft_launcher_id, unft.owner_did, p2_puzzle, unft.trade_price_percentage, unft.royalty_address)
+            info = NFTInfo.from_json_dict((await self.wallet_client.get_nft_info(coin_record.name.hex()))["nft_info"])
+            if unft.owner_did != info.owner_did:
+                logger.warning(f"DID mismatch in make_transfer_nft_p2_spend_bundle ({encode_puzzle_hash(nft_launcher_id, 'nft')}): unft: {unft.owner_did.hex() if unft.owner_did is not None else None}, info: {info.owner_did.hex() if info.owner_did is not None else None}")
+
+            nft_ownership_puzzle: Program = create_ownership_layer_puzzle(nft_launcher_id, info.owner_did,
+                                                                           p2_puzzle, unft.trade_price_percentage, unft.royalty_address)
             nft_singleton_inner_puzzle = create_nft_layer_puzzle_with_curry_params(unft.metadata, unft.metadata_updater_hash, nft_ownership_puzzle)
             full_puzzle = create_full_puzzle_with_nft_puzzle(nft_launcher_id, nft_singleton_inner_puzzle)
             logger.info(f"Preparing p2 spend for NFT at {full_puzzle.get_tree_hash()}")
@@ -399,7 +417,6 @@ class Fusion:
             innersol = p2_solution
 
             lineage_proof = LineageProof(parent_coin_record.coin.parent_coin_info, parent_inner_puzzlehash, 1)
-            magic_condition = None
             if unft.supports_did:
                 innersol = Program.to([innersol])
 
@@ -416,12 +433,16 @@ class Fusion:
                         self.get_synthetic_private_key_for_puzzle_hash,
                         AGG_SIG_ME_ADDITIONAL_DATA, MAX_BLOCK_COST_CLVM, [puzzle_hash_for_synthetic_public_key])
 
+            if logger.isEnabledFor(logging.DEBUG):
+                with open("./spend.json", "w") as f:
+                    f.write(json.dumps(nft_spend_bundle.to_json_dict()))
+
             return nft_spend_bundle
 
 
     # accept an offer by transferring ephemeral coin from OFFER_MOD_HASH
     # returns - Tuple of Spend Bundle and NFT singleton inner puzzlehash
-    async def make_accept_offer_nft_spend_bundle(self, parent_coin_spend: CoinSpend, nonce: bytes32, nft_launcher_id: bytes32, puzzle: Program, recipient_puzzlehash: bytes32, fee_amount:int=0) -> Tuple[SpendBundle, bytes32]:
+    async def make_accept_offer_nft_spend_bundle(self, parent_coin_spend: CoinSpend, nonce: bytes32, nft_launcher_id: bytes32, puzzle: Program, recipient_puzzlehash: bytes32, owner_did=None, fee_amount:int=0) -> Tuple[SpendBundle, bytes32]:
         logger.info(f"Transferring offered NFT {encode_puzzle_hash(nft_launcher_id, 'nft')} to {encode_puzzle_hash(recipient_puzzlehash, PREFIX)}")
         nft_launcher_coin_record = await self.node_client.get_coin_record_by_name(nft_launcher_id)
         assert nft_launcher_coin_record is not None
@@ -562,14 +583,14 @@ class Fusion:
         assert full_puzzle.get_tree_hash().hex() == singleton_child.puzzle_hash.hex()
 
         nfts_to_lock = []
+        i = 0
         for coin_id in nft_coin_ids_to_lock:
-            i = 0
             nfts_to_lock.append(await self.lookup_nft_coin_details(nft_launcher_ids_to_lock[i], coin_id))
             i += 1
 
         nfts_to_unlock = []
+        i = 0
         for coin_id in nft_coin_ids_to_unlock:
-            i = 0
             nfts_to_unlock.append(await self.lookup_nft_coin_details(nft_launcher_ids_to_unlock[i], coin_id, nft_next_puzzlehashes[i]))
             i += 1
 
@@ -579,7 +600,6 @@ class Fusion:
             a_or_b, nonce])
         
         lineage_proof: LineageProof = lineage_proof_for_coinsol(singleton_coinsol)
-        assert full_puzzle.get_tree_hash() == singleton_child.puzzle_hash
 
         full_solution: Program = solution_for_singleton(
             lineage_proof,
@@ -618,10 +638,13 @@ class Fusion:
         assert unft.supports_did
 
         info = NFTInfo.from_json_dict((await self.wallet_client.get_nft_info(coin_id.hex()))["nft_info"])
+        # unft insists on giving us a None owner_did... Need info too for now??
+        if unft.owner_did != info.owner_did:
+            logger.warning(f"DID mismatch in lookup_nft_coin_details ({encode_puzzle_hash(launcher_id, 'nft')}): unft: {unft.owner_did.hex() if unft.owner_did is not None else None}, info: {info.owner_did.hex() if info.owner_did is not None else None}")
 
-        # unft insists on giving us a None owner_did... Need info too for now
-        details = [coin_id, unft.metadata.get_tree_hash(), info.owner_did, unft.transfer_program.get_tree_hash()]
-        logger.debug(f"Details: [{coin_id.hex()}, {unft.metadata.get_tree_hash()}, {info.owner_did.hex()}, {unft.transfer_program.get_tree_hash()}]")
+        details = [coin_id, unft.metadata.get_tree_hash(), info.owner_did, ###None
+                   unft.transfer_program.get_tree_hash()]
+        logger.debug(f"Details: [{coin_id.hex()}, {unft.metadata.get_tree_hash()}, {info.owner_did}, {unft.transfer_program.get_tree_hash()}]")
 
         if target_inner_puzzlehash is not None:
             details.append(target_inner_puzzlehash)
@@ -864,7 +887,17 @@ class Fusion:
         assert len(a_ids) > 0
         assert len(b_ids) > 0
 
-        logger.info(f"OFFER_MOD: {OFFER_MOD_HASH.hex()}")
+        logger.info("*********************************************************")
+
+        logger.info("Swapping...")
+
+        logger.info("NFT(s) A:")
+        for a in a_ids:
+            logger.info("\t" + encode_puzzle_hash(a, "nft"))
+        logger.info("NFT(s) B:")
+        for b in b_ids:
+            logger.info("\t" + encode_puzzle_hash(b, "nft"))
+        logger.info("*********************************************************")
 
         nft_next_puzzlehashes: List[bytes32] = []
 
@@ -952,8 +985,9 @@ class Fusion:
 
         spend_bundle = SpendBundle.aggregate([user_offer_spend_bundle, offers_spend_bundle, spend_bundle2])
 
-        with open("./spend.json", "w") as f:
-            f.write(json.dumps(spend_bundle.to_json_dict()))
+        if logger.isEnabledFor(logging.DEBUG):
+            with open("./spend.json", "w") as f:
+                f.write(json.dumps(spend_bundle.to_json_dict()))
 
         status = await self.node_client.push_tx(spend_bundle)
         logger.info(f"* * * * {status}")
