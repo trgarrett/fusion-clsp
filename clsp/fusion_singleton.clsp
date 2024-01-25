@@ -18,17 +18,18 @@
         NFT_B_LAUNCHER_IDS ; commitment to the other side of a swap pair, LIST of launcher coin IDs
         my_id ; the singleton coin ID
         my_inner_puzzlehash ; the current inner puzzlehash for the singleton
+        my_amount ; the amount of the singleton
         nfts_to_lock ; list of (coin_id nft_metadata_hash nft_did nft_transfer_program_hash)
                      ; final argument target_inner_puzzlehash omitted and enforced as P2_SINGLETON_PUZZLE_HASH
         nfts_to_unlock ; list of (coin_id nft_metadata_hash nft_did nft_transfer_program_hash target_inner_puzzlehash)
-        a_or_b ; 'a' or 'b' - the coin symbolic name to release
+        unlock_a ; if true: unlock A, otherwise unlock B
         offer_nonce ; the cryptographic nonce required for offer settlement
      )
 
   (include condition_codes.clib)
   (include utils.clib)
 
-  (defun-inline base_conditions (SINGLETON_STRUCT my_id my_inner_puzzlehash)
+  (defun-inline base_conditions (SINGLETON_STRUCT my_id my_inner_puzzlehash my_amount)
     (list
       ; block ephemeral spends
       (list ASSERT_HEIGHT_RELATIVE 1)
@@ -36,9 +37,10 @@
       ; who am I?
       (list ASSERT_MY_COIN_ID my_id)
       (list ASSERT_MY_PUZZLEHASH (calculate_full_puzzle_hash SINGLETON_STRUCT my_inner_puzzlehash))
+      (list ASSERT_MY_AMOUNT my_amount)
 
       ; spend myself forward
-      (list CREATE_COIN my_inner_puzzlehash 1 (f (r SINGLETON_STRUCT))) ;; opt to keep details beyond launcher ID encoded in eve coin spend
+      (list CREATE_COIN my_inner_puzzlehash my_amount (f (r SINGLETON_STRUCT))) ;; opt to keep details beyond launcher ID encoded in eve coin spend
     )
   )
 
@@ -116,7 +118,7 @@
 
   (defun-inline lock_and_unlock (SINGLETON_STRUCT P2_SINGLETON_PUZZLE_HASH OFFER_MOD_HASH
                                   NFT_STATE_LAYER_MOD_HASH NFT_OWNERSHIP_LAYER_MOD_HASH METADATA_UPDATER_PUZZLE_HASH_HASH
-                                  my_id my_inner_puzzlehash 
+                                  my_id my_inner_puzzlehash my_amount
                                   nfts_to_lock nfts_to_unlock
                                   offer_nonce)
       (compute_nft_lock_conditions 
@@ -125,30 +127,27 @@
           (compute_nft_unlock_conditions
                   (f SINGLETON_STRUCT) (r (r SINGLETON_STRUCT)) OFFER_MOD_HASH NFT_STATE_LAYER_MOD_HASH NFT_OWNERSHIP_LAYER_MOD_HASH METADATA_UPDATER_PUZZLE_HASH_HASH 
                    nfts_to_unlock my_id offer_nonce
-              (base_conditions SINGLETON_STRUCT my_id my_inner_puzzlehash)
+              (base_conditions SINGLETON_STRUCT my_id my_inner_puzzlehash my_amount)
           )
       )
   )
 
-  (if (any (= a_or_b 'a') (= a_or_b 'b'))
-    (if (= a_or_b 'a')
-      ; release a, lock b
-      (lock_and_unlock 
-              SINGLETON_STRUCT P2_SINGLETON_PUZZLE_HASH OFFER_MOD_HASH
-              NFT_STATE_LAYER_MOD_HASH NFT_OWNERSHIP_LAYER_MOD_HASH METADATA_UPDATER_PUZZLE_HASH_HASH
-              my_id my_inner_puzzlehash 
-              (prepend_entries_to_lists NFT_B_LAUNCHER_IDS nfts_to_lock)
-              (prepend_entries_to_lists NFT_A_LAUNCHER_IDS nfts_to_unlock)
-              offer_nonce)
-      ; release b and lock a
-      (lock_and_unlock 
-              SINGLETON_STRUCT P2_SINGLETON_PUZZLE_HASH OFFER_MOD_HASH
-              NFT_STATE_LAYER_MOD_HASH NFT_OWNERSHIP_LAYER_MOD_HASH METADATA_UPDATER_PUZZLE_HASH_HASH
-              my_id my_inner_puzzlehash 
-              (prepend_entries_to_lists NFT_A_LAUNCHER_IDS nfts_to_lock)
-              (prepend_entries_to_lists NFT_B_LAUNCHER_IDS nfts_to_unlock)
-              offer_nonce)
-    )
-    (x a_or_b)
+  (if unlock_a
+    ; unlock a, lock b
+    (lock_and_unlock 
+            SINGLETON_STRUCT P2_SINGLETON_PUZZLE_HASH OFFER_MOD_HASH
+            NFT_STATE_LAYER_MOD_HASH NFT_OWNERSHIP_LAYER_MOD_HASH METADATA_UPDATER_PUZZLE_HASH_HASH
+            my_id my_inner_puzzlehash my_amount
+            (prepend_entries_to_lists NFT_B_LAUNCHER_IDS nfts_to_lock)
+            (prepend_entries_to_lists NFT_A_LAUNCHER_IDS nfts_to_unlock)
+            offer_nonce)
+    ; unlock b and lock a
+    (lock_and_unlock 
+            SINGLETON_STRUCT P2_SINGLETON_PUZZLE_HASH OFFER_MOD_HASH
+            NFT_STATE_LAYER_MOD_HASH NFT_OWNERSHIP_LAYER_MOD_HASH METADATA_UPDATER_PUZZLE_HASH_HASH
+            my_id my_inner_puzzlehash my_amount
+            (prepend_entries_to_lists NFT_A_LAUNCHER_IDS nfts_to_lock)
+            (prepend_entries_to_lists NFT_B_LAUNCHER_IDS nfts_to_unlock)
+            offer_nonce)
   )
 )

@@ -531,7 +531,7 @@ class Fusion:
             i += 1
 
         spend_bundles.append(await self.make_swap_spend_bundle(singleton_launcher_id, singleton_inner_puzzle, lock_coin_ids, b_launcher_ids,
-                                                               release_coin_ids, a_launcher_ids, nft_next_puzzlehashes, 'a', nonce))
+                                                               release_coin_ids, a_launcher_ids, nft_next_puzzlehashes, True, nonce))
         spend_bundle = SpendBundle.aggregate(spend_bundles)
         return spend_bundle
 
@@ -564,7 +564,7 @@ class Fusion:
             i += 1
 
         spend_bundles.append(await self.make_swap_spend_bundle(singleton_launcher_id, singleton_inner_puzzle, lock_coin_ids, a_launcher_ids,
-                                                               release_coin_ids, b_launcher_ids, nft_next_puzzlehashes, 'b', nonce))
+                                                               release_coin_ids, b_launcher_ids, nft_next_puzzlehashes, False, nonce))
         spend_bundle = SpendBundle.aggregate(spend_bundles)
         return spend_bundle
     
@@ -573,7 +573,7 @@ class Fusion:
     async def make_swap_spend_bundle(self, singleton_launcher_id, singleton_inner_puzzle,
                                      nft_coin_ids_to_lock: List[bytes32], nft_launcher_ids_to_lock,
                                      nft_coin_ids_to_unlock: List[bytes32], nft_launcher_ids_to_unlock,
-                                     nft_next_puzzlehashes: List[bytes32], a_or_b, nonce: bytes32) -> SpendBundle:
+                                     nft_next_puzzlehashes: List[bytes32], unlock_a: bool, nonce: bytes32) -> SpendBundle:
         singleton_child: Coin = await get_unspent_singleton_coin(self.node_client, singleton_launcher_id)
         logger.info(f"make_swap_spend_bundle for singleton: {singleton_child.name().hex()}")
         singleton_parent_record: CoinRecord = await self.node_client.get_coin_record_by_name(singleton_child.parent_coin_info)
@@ -596,9 +596,9 @@ class Fusion:
             i += 1
 
         inner_solution: Program = Program.to([
-            singleton_child.name(), singleton_inner_puzzle.get_tree_hash(),
+            singleton_child.name(), singleton_inner_puzzle.get_tree_hash(), singleton_child.amount,
             nfts_to_lock, nfts_to_unlock,
-            a_or_b, nonce])
+            unlock_a, nonce])
         
         lineage_proof: LineageProof = lineage_proof_for_coinsol(singleton_coinsol)
 
