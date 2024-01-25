@@ -9,7 +9,7 @@ dependencies=[
   'chia_rs == 0.2.11'
 ]
 name = "fusion-clsp"
-version = "1.1.2"
+version = "1.2.0"
 authors = [
   { name="Tim Garrett", email="trg83@yahoo.com" },
 ]
