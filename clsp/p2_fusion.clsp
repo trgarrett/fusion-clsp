@@ -14,43 +14,29 @@
     (include condition_codes.clib)
     (include utils.clib)
 
-    (defun-inline spend (SINGLETON_MOD_HASH LAUNCHER_ID LAUNCHER_PUZZLE_HASH
-                         singleton_inner_puzzle_hash singleton_coin_id
-                         my_launcher_id 
-                         my_singleton_inner_puzzle_hash
-                         my_amount
-                         next_puzzlehash)
-        (list
-            (list ASSERT_MY_AMOUNT my_amount)
+    (list
+        (list ASSERT_MY_AMOUNT my_amount)
 
-            ; prove supplied NFT coin matches the expected derived puzzle hash
-            (list ASSERT_MY_PUZZLEHASH
-                (calculate_full_puzzle_hash (c SINGLETON_MOD_HASH (c my_launcher_id LAUNCHER_PUZZLE_HASH)) my_singleton_inner_puzzle_hash)
-            )
-
-            ; assert singleton spend behavior
-            (list ASSERT_PUZZLE_ANNOUNCEMENT
-                (sha256
-                    (calculate_full_puzzle_hash (c SINGLETON_MOD_HASH (c LAUNCHER_ID LAUNCHER_PUZZLE_HASH)) singleton_inner_puzzle_hash)
-                    (sha256 singleton_coin_id my_launcher_id next_puzzlehash)
-                )
-            )
-            
-            ; create and announce NFT coin
-            (list CREATE_COIN next_puzzlehash my_amount (list next_puzzlehash))
-            
-            ; announce that a SPECIFIC singleton is being spent to help prevent ephemeral singleton spends from influencing
-            ; announce the combination of NFT launcher ID and next puzzlehash
-            (list CREATE_COIN_ANNOUNCEMENT (sha256 singleton_coin_id my_launcher_id next_puzzlehash))
+        ; prove supplied NFT coin matches the expected derived puzzle hash
+        (list ASSERT_MY_PUZZLEHASH
+            (calculate_full_puzzle_hash (c SINGLETON_MOD_HASH (c my_launcher_id LAUNCHER_PUZZLE_HASH)) my_singleton_inner_puzzle_hash)
         )
+
+        ; assert singleton spend behavior
+        (list ASSERT_PUZZLE_ANNOUNCEMENT
+            (sha256
+                (calculate_full_puzzle_hash (c SINGLETON_MOD_HASH (c LAUNCHER_ID LAUNCHER_PUZZLE_HASH)) singleton_inner_puzzle_hash)
+                (sha256 singleton_coin_id my_launcher_id next_puzzlehash)
+            )
+        )
+        
+        ; create and announce NFT coin
+        (list CREATE_COIN next_puzzlehash my_amount (list next_puzzlehash))
+        
+        ; announce that a SPECIFIC singleton is being spent to help prevent ephemeral singleton spends from influencing
+        ; announce the combination of NFT launcher ID and next puzzlehash
+        (list CREATE_COIN_ANNOUNCEMENT (sha256 singleton_coin_id my_launcher_id next_puzzlehash))
     )
 
-    ; main
-    (spend 
-        SINGLETON_MOD_HASH LAUNCHER_ID LAUNCHER_PUZZLE_HASH 
-        singleton_inner_puzzle_hash singleton_coin_id
-        my_launcher_id my_singleton_inner_puzzle_hash
-        my_amount next_puzzlehash
-    )
 )
 

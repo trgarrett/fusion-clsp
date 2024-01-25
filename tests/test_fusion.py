@@ -134,7 +134,7 @@ class TestNftUpgrade:
             # transfer A to P2
             nft_a_coin_id = (await fusion.find_unspent_descendant(nft_a_coin_record)).coin.name()
             logger.info(f"Locking A into p2 (coin id {nft_a_coin_id.hex()})")
-            (a_spend_bundle, _) = await fusion.make_transfer_nft_spend_bundle(nft_a_launcher_id, p2_puzzlehash, did_one_id_bytes)
+            (a_spend_bundle, _) = await fusion.make_transfer_nft_spend_bundle(nft_a_launcher_id, p2_puzzlehash)
             status = await node_client.push_tx(a_spend_bundle)
             # make sure A is visible in p2 before we move further
             await self.wait_for_coin_spent(node_client, a_spend_bundle.coin_spends[0].coin.name())
@@ -244,8 +244,8 @@ class TestNftUpgrade:
         requested_payments[nft_a_launcher_id] = [Payment(nft_next_puzzlehash, 1, [nft_next_puzzlehash])]
 
         notarized_payments = Offer.notarize_payments(requested_payments, [nft_b1_coin_record.coin, nft_b2_coin_record.coin])
-        spend_bundle_b1, _ = await fusion.make_transfer_nft_spend_bundle(nft_b1_launcher_id, OFFER_MOD_HASH, b_dids[0])
-        spend_bundle_b2, _ = await fusion.make_transfer_nft_spend_bundle(nft_b2_launcher_id, OFFER_MOD_HASH, b_dids[1])
+        spend_bundle_b1, _ = await fusion.make_transfer_nft_spend_bundle(nft_b1_launcher_id, OFFER_MOD_HASH)
+        spend_bundle_b2, _ = await fusion.make_transfer_nft_spend_bundle(nft_b2_launcher_id, OFFER_MOD_HASH)
 
         spend_bundle: SpendBundle = SpendBundle.aggregate([spend_bundle_b1, spend_bundle_b2])
 
@@ -270,7 +270,7 @@ class TestNftUpgrade:
         requested_payments[nft_b2_launcher_id] = [Payment(nft_next_puzzlehash, 1, [nft_next_puzzlehash])]
 
         notarized_payments = Offer.notarize_payments(requested_payments, [nft_a_coin_record.coin])
-        spend_bundle_a, _ = await fusion.make_transfer_nft_spend_bundle(nft_a_launcher_id, OFFER_MOD_HASH, nft_a_did)
+        spend_bundle_a, _ = await fusion.make_transfer_nft_spend_bundle(nft_a_launcher_id, OFFER_MOD_HASH)
 
         offer: Offer = Offer(notarized_payments, spend_bundle_a, driver_dict)
         return offer

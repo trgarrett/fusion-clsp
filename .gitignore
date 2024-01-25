@@ -5,5 +5,5 @@ __pycache__
 offer.txt
 offer.json
 spend.debug
-spend.json
+spend*.json
 .DS_Store

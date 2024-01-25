@@ -5,22 +5,9 @@
   ; sha256
   (include sha256tree.clib)
 
-  (defconstant b32 32)
-
-  (defun-inline size_b32 (var)
-    (= (strlen var) b32)
-  )
-
-  (defun calculate_coin_id (parent puzzlehash amount)
-    (if (all (size_b32 parent) (size_b32 puzzlehash) (> amount -1))
-      (sha256 parent puzzlehash amount)
-      (x)
-    )
-  )
-
   ;; return the full puzzlehash for a singleton with the innerpuzzle curried in
   (defun-inline calculate_full_puzzle_hash (SINGLETON_STRUCT inner_puzzle_hash)
-    (curry_hashes_inline (f SINGLETON_STRUCT)
+    (curry_hashes (f SINGLETON_STRUCT)
       ; calculate the singleton struct
       (sha256tree SINGLETON_STRUCT)
       inner_puzzle_hash
@@ -35,7 +22,7 @@
                                                 nft_launcher_id
                                                 metadata_hash
                                                 nft_inner_puzzle_hash)
-    (curry_hashes_inline 
+    (curry_hashes 
       SINGLETON_MOD_HASH   
       (sha256 2
         (sha256 1 SINGLETON_MOD_HASH)
@@ -44,7 +31,7 @@
           (sha256 1 LAUNCHER_PUZZLE_HASH)
         )
       )
-      (curry_hashes_inline 
+      (curry_hashes 
         NFT_STATE_LAYER_MOD_HASH 
         (sha256 1 NFT_STATE_LAYER_MOD_HASH)
         metadata_hash
