@@ -72,6 +72,10 @@ NFT_METADATA_UPDATER_PUZZLE_HASH_HASH: Program = Program.to(NFT_METADATA_UPDATER
 
 INFINITE_COST = 11000000000
 
+mint_fee = 6000000000
+did_fee = 6000000000
+mint_did = 'did:chia:1rdsdz4pnfdzvx9d9y8x60ygznaexeajegage55yemaevmn4xtkeqx9ku32'
+
 P2_MOD: Program = load_clvm("p2_fusion.clsp", package_or_requirement="clsp", recompile=True)
 
 PREFIX = os.environ.get("PREFIX", "xch")
@@ -216,9 +220,13 @@ class Fusion:
                 fee=fee_amount,
                 coin_announcements_to_assert = { announcement.name() }
             )
+            logger.info(f'Solution: {solution}')
 
             coin_a_puzzle = puzzle_for_coin(launcher_parent)
             coin_a_spend = CoinSpend(launcher_parent, coin_a_puzzle, solution)
+
+            logger.info(f'coin_a_puzzle: {coin_a_puzzle}')
+            logger.info(f'coin_a_spend: {coin_a_spend}')
 
             launcher_cs: CoinSpend = CoinSpend(
                 launcher_coin,
@@ -226,11 +234,19 @@ class Fusion:
                 SerializedProgram.from_program(genesis_launcher_solution),
             )
 
+            logger.info(f'launcher_cs: {launcher_cs}')
+
             logger.info('Will sign launcher spend...')
+
+            logger.info(f'wallet_keyf: {wallet_keyf}')
+            logger.info(f'AGG_SIG_ME_ADDITIONAL_DATA: {AGG_SIG_ME_ADDITIONAL_DATA}')
+            logger.info(f'MAX_BLOCK_COST_CLVM: {MAX_BLOCK_COST_CLVM}')
+            logger.info(f'puzzle_hash_for_synthetic_public_key: {puzzle_hash_for_synthetic_public_key}')
 
             full_spend = await sign_coin_spends([coin_a_spend, launcher_cs], wallet_keyf, 
                                                 self.get_synthetic_private_key_for_puzzle_hash, 
                                                 AGG_SIG_ME_ADDITIONAL_DATA, MAX_BLOCK_COST_CLVM, [puzzle_hash_for_synthetic_public_key])
+            logger.info(f'full_spend: {full_spend}')
             status = await self.node_client.push_tx(full_spend)
             print_json(status)
 
@@ -409,6 +425,10 @@ class Fusion:
             nft_singleton_inner_puzzle = create_nft_layer_puzzle_with_curry_params(unft.metadata, unft.metadata_updater_hash, nft_ownership_puzzle)
             full_puzzle = create_full_puzzle_with_nft_puzzle(nft_launcher_id, nft_singleton_inner_puzzle)
             logger.info(f"Preparing p2 spend for NFT at {full_puzzle.get_tree_hash()}")
+            logger.info(f"Full Puzzle Tree hash hex: {full_puzzle.get_tree_hash().hex()}")
+            logger.info(f"coin_record.coin: {coin_record.coin}")
+            logger.info(f"coin_record.coin.puzzle_hash: {coin_record.coin.puzzle_hash}")
+            logger.info(f"coin_record.coin.puzzle_hash.hex(): {coin_record.coin.puzzle_hash.hex()}")
             assert full_puzzle.get_tree_hash().hex() == coin_record.coin.puzzle_hash.hex()
     
             logger.debug(f"Singleton inner puzzle hash: {nft_singleton_inner_puzzle.get_tree_hash()}")
@@ -665,7 +685,7 @@ class Fusion:
         return await self.find_unspent_descendant(child)
     
 
-    async def cli_deploy_singleton(self, nft_a_ids: str, nft_b_ids: str, fee_amount:int=1000) -> bytes32:
+    async def cli_deploy_singleton(self, nft_a_ids: str, nft_b_ids: str, fee_amount:int=10000000000) -> bytes32:
         logger.info(f"CLI: deploy singleton for NFT(s) A: [{nft_a_ids}] ; B: [{nft_b_ids}]")
 
         a_as_str_arr: List[str] = nft_a_ids.split(',')
@@ -695,7 +715,10 @@ class Fusion:
     # mint a fake NFT
     async def cli_mint(self, count=1):
         for i in range(count):
-            did_id, _ = await self.create_did()
+            if not mint_did:
+                did_id, _ = await self.create_did()
+            else:
+                did_id = mint_did
             await self.mint_nft(did_id, puzzle_for_pk(wallet_keys[0].get_g1()).get_tree_hash(), i)
 
 
@@ -718,7 +741,7 @@ class Fusion:
 
     async def create_did(self) -> Tuple[str, bytes32]:
         logger.info("Creating DID wallet")
-        res = await self.wallet_client.create_new_did_wallet(1)
+        res = await self.wallet_client.create_new_did_wallet(1, did_fee)
         assert res["success"] is True
         did_id = res.get("my_did")
         did_coin_id = decode_puzzle_hash(did_id)
@@ -764,6 +787,10 @@ class Fusion:
 
         data_hash_param = "0xD4584AD463139FA8C0D9F68F4B59F185"
         meta_hash_param = "0x2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+        license_hash_param = "0xD4584AD463139FA8C0D9F68F4B59F185"
+        edition_number_param = 22
+        edition_total_param = 22
+        royalty_percentage_param = 22
         address = encode_puzzle_hash(recipient_puzzlehash, prefix=PREFIX)
 
         tx_config = TXConfig(min_coin_amount=1, max_coin_amount=MAX_COIN_AMOUNT, excluded_coin_amounts=[], excluded_coin_ids=[], reuse_puzhash=True)
@@ -776,8 +803,14 @@ class Fusion:
             [f"https://example.com/img/{suffix}"],
             meta_hash=meta_hash_param,
             meta_uris=[f"https://example.com/meta/{suffix}"],
+            license_hash=license_hash_param,
+            license_uris=[f"https://example.com/meta/{suffix}"],
+            edition_number=edition_number_param,
+            edition_total=edition_total_param,
+            royalty_percentage=royalty_percentage_param,
             tx_config=tx_config,
             did_id=did_id,
+            fee=mint_fee,
         )
         assert res.get("success")
 
@@ -879,7 +912,7 @@ class Fusion:
         return driver_dict
 
 
-    async def swap(self, launcher_id: bytes32, offer: str, fee_amount:int=0):
+    async def swap(self, launcher_id: bytes32, offer: str, fee_amount:int=60000000000):
         logger.info("******************************************************************************************************************")
         logger.info(f"Accepting offer at singleton: {launcher_id.hex()}")
         logger.info(f"offer: {offer}")
