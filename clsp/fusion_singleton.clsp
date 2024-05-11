@@ -29,6 +29,12 @@
   (include condition_codes.clib)
   (include utils.clib)
 
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  ;; make it easy to locate on-chain coins corresponding to CHIP-0021 puzzles
+  ;; echo "CHIP-0021" | sha256sum -> bytes32
+  ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+  (defconstant HINT 0x0a8d35c54b18e9be24a1aebc49497ebc53d33c6b875d7e2c984cbe35185b5a7f)
+
   (defun-inline base_conditions (SINGLETON_STRUCT my_id my_inner_puzzlehash my_amount)
     (list
       ; block ephemeral spends
@@ -40,7 +46,7 @@
       (list ASSERT_MY_AMOUNT my_amount)
 
       ; spend myself forward
-      (list CREATE_COIN my_inner_puzzlehash my_amount (f (r SINGLETON_STRUCT))) ;; opt to keep details beyond launcher ID encoded in eve coin spend
+      (list CREATE_COIN my_inner_puzzlehash my_amount (list HINT (f (r SINGLETON_STRUCT)))) ;; opt to keep details beyond hint and launcher ID encoded in eve coin spend
     )
   )
 

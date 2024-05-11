@@ -9,7 +9,6 @@ import subprocess
 from time import sleep
 import traceback
 
-from chia.types.announcement import Announcement
 from chia.types.blockchain_format.coin import Coin
 from chia.types.blockchain_format.program import Program
 from chia.types.blockchain_format.sized_bytes import bytes32
@@ -43,7 +42,7 @@ from chia.rpc.full_node_rpc_client import FullNodeRpcClient
 from chia.rpc.wallet_rpc_client import WalletRpcClient
 from chia.util.bech32m import decode_puzzle_hash, encode_puzzle_hash
 
-from fusion.fusion import Fusion, wallet_keys, puzzle_for_coin
+from fusion.fusion import Fusion, wallet_keys, puzzle_for_coin, CHIP21_HINT
 
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -118,10 +117,15 @@ class TestNftUpgrade:
 
             singleton_launcher_id = await fusion.cli_deploy_singleton(encode_puzzle_hash(nft_a_launcher_id, "nft"),
                                                                       encode_puzzle_hash(nft_b1_launcher_id, "nft") + ","
-                                                                      + encode_puzzle_hash(nft_b2_launcher_id, "nft"), 
+                                                                      + encode_puzzle_hash(nft_b2_launcher_id, "nft"),
                                                                       fee_amount=50000)
             assert singleton_launcher_id is not None
 
+            #check hinting was applied to launcher
+            hinted_coin_records: List[CoinRecord] = await node_client.get_coin_records_by_hint(CHIP21_HINT,
+                    start_height=nft_b2_coin_record.confirmed_block_index-1, include_spent_coins=True)
+            assert len(hinted_coin_records) == 1
+                        
             p2_singleton = fusion.pay_to_singleton_puzzle(singleton_launcher_id)
             p2_puzzlehash = p2_singleton.get_tree_hash()
 
@@ -221,6 +225,11 @@ class TestNftUpgrade:
             b2_puzzle = puzzle_for_pk(wallet_keys[0].get_g1())
             b2_full_puzzle = await fusion.full_puzzle_for_p2_puzzle(nft_b2_launcher_id, b2_puzzle)
             assert nft_b2_coin_record.coin.puzzle_hash.hex() == b2_full_puzzle.get_tree_hash().hex()
+
+            #check hinting was applied to last state of singleton
+            hinted_coin_records = await node_client.get_coin_records_by_hint(CHIP21_HINT,
+                    start_height=nft_b2_coin_record.confirmed_block_index, include_spent_coins=False)
+            assert len(hinted_coin_records) == 1
 
         finally:
             # clean up connections
