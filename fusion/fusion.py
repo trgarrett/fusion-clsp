@@ -16,20 +16,19 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 from chia.consensus.default_constants import DEFAULT_CONSTANTS
 from chia.rpc.full_node_rpc_client import FullNodeRpcClient
 from chia.rpc.wallet_rpc_client import WalletRpcClient
-from chia.types.announcement import Announcement
 from chia.types.blockchain_format.coin import Coin
 from chia.types.blockchain_format.program import Program
 from chia.types.blockchain_format.serialized_program import SerializedProgram
 from chia.types.blockchain_format.sized_bytes import bytes32
 from chia.types.coin_record import CoinRecord
-from chia.types.coin_spend import CoinSpend
+from chia.types.coin_spend import make_spend, CoinSpend
 from chia.types.spend_bundle import SpendBundle
 from chia.util.bech32m import decode_puzzle_hash, encode_puzzle_hash
 from chia.util.config import load_config
 from chia.util.default_root import DEFAULT_ROOT_PATH
 from chia.util.ints import uint16, uint64
 from chia.util.keychain import Keychain
-from chia.wallet.conditions import UnknownCondition
+from chia.wallet.conditions import CreateCoinAnnouncement, UnknownCondition
 from chia.wallet.derive_keys import master_sk_to_wallet_sk, master_sk_to_wallet_sk_unhardened
 from chia.wallet.lineage_proof import LineageProof
 from chia.wallet.nft_wallet.nft_info import NFTInfo
@@ -87,6 +86,8 @@ SINGLETON_AMOUNT = uint64(1)
 DERIVATIONS = int(os.environ.get('DERIVATIONS', 1000))
 
 SINGLETON_INNER: Program = load_clvm("fusion_singleton.clsp", package_or_requirement="clsp", recompile=True)
+
+CHIP21_HINT: bytes32 = bytes32.from_hexstr("0x83241157e6b396cc2b428b8ad47b113de88a23a91eeed5430f086f36cc0385c9")
 
 config = load_config(DEFAULT_ROOT_PATH, "config.yaml")
 self_hostname = "localhost"
@@ -198,8 +199,8 @@ class Fusion:
             extra_data = [launcher_coin.name(), nft_a_launcher_ids, nft_b_launcher_ids]
             genesis_launcher_solution: Program = Program.to([puzzle_hash, SINGLETON_AMOUNT, [], extra_data])
             message_program: Program = Program.to([puzzle_hash, SINGLETON_AMOUNT, []])
-            announcement = Announcement(launcher_coin.name(), message_program.get_tree_hash())
-
+            announcement = CreateCoinAnnouncement(message_program, launcher_coin.name())
+            
             launcher_parent: Coin = (await self.node_client.get_coin_record_by_name(launcher_coin.parent_coin_info)).coin
             change_puzzlehash = launcher_parent.puzzle_hash
             change_amount = launcher_parent.amount - fee_amount - SINGLETON_AMOUNT
@@ -207,20 +208,20 @@ class Fusion:
 
             primaries = []
             primaries.append(Payment(change_puzzlehash, change_amount, change_puzzlehash))
-            primaries.append(Payment(SINGLETON_LAUNCHER.get_tree_hash(), SINGLETON_AMOUNT))
+            primaries.append(Payment(SINGLETON_LAUNCHER.get_tree_hash(), SINGLETON_AMOUNT, [CHIP21_HINT]))
 
             logger.info(f'Making coin spend with fees: {fee_amount}')
             wallet = Wallet()
             solution = wallet.make_solution(
                 primaries=primaries,
                 fee=fee_amount,
-                coin_announcements_to_assert = { announcement.name() }
+                conditions = [announcement]
             )
 
             coin_a_puzzle = puzzle_for_coin(launcher_parent)
-            coin_a_spend = CoinSpend(launcher_parent, coin_a_puzzle, solution)
+            coin_a_spend = make_spend(launcher_parent, coin_a_puzzle, solution)
 
-            launcher_cs: CoinSpend = CoinSpend(
+            launcher_cs: CoinSpend = make_spend(
                 launcher_coin,
                 SerializedProgram.from_program(genesis_launcher_puz),
                 SerializedProgram.from_program(genesis_launcher_solution),
@@ -228,8 +229,8 @@ class Fusion:
 
             logger.info('Will sign launcher spend...')
 
-            full_spend = await sign_coin_spends([coin_a_spend, launcher_cs], wallet_keyf, 
-                                                self.get_synthetic_private_key_for_puzzle_hash, 
+            full_spend = await sign_coin_spends([coin_a_spend, launcher_cs], wallet_keyf,
+                                                self.get_synthetic_private_key_for_puzzle_hash,
                                                 AGG_SIG_ME_ADDITIONAL_DATA, MAX_BLOCK_COST_CLVM, [puzzle_hash_for_synthetic_public_key])
             status = await self.node_client.push_tx(full_spend)
             print_json(status)
@@ -362,7 +363,7 @@ class Fusion:
 
             assert isinstance(lineage_proof, LineageProof)
             singleton_solution = Program.to([lineage_proof.to_program(), 1, nft_layer_solution])
-            coin_spend = CoinSpend(coin_record.coin, full_puzzle, singleton_solution)
+            coin_spend = make_spend(coin_record.coin, full_puzzle, singleton_solution)
 
             nft_spend_bundle = await sign_coin_spends([coin_spend], wallet_keyf, 
                                     self.get_synthetic_private_key_for_puzzle_hash, 
@@ -428,7 +429,7 @@ class Fusion:
             assert isinstance(lineage_proof, LineageProof)
             singleton_solution = Program.to([lineage_proof.to_program(), 1, nft_layer_solution])
 
-            coin_spend = CoinSpend(coin_record.coin, full_puzzle, singleton_solution)
+            coin_spend = make_spend(coin_record.coin, full_puzzle, singleton_solution)
 
             nft_spend_bundle = await sign_coin_spends([coin_spend], wallet_keyf,
                         self.get_synthetic_private_key_for_puzzle_hash,
@@ -475,7 +476,7 @@ class Fusion:
         assert isinstance(lineage_proof, LineageProof)
         singleton_solution = Program.to([lineage_proof.to_program(), 1, nft_layer_solution])
 
-        coin_spend = CoinSpend(ephemeral_coin, full_puzzle, singleton_solution)
+        coin_spend = make_spend(ephemeral_coin, full_puzzle, singleton_solution)
         spends = [coin_spend]
 
         if fee_amount > 0:
@@ -495,7 +496,7 @@ class Fusion:
                 # as nasty as they are in Chialisp, they're worse in Python
             )
             fee_coin_puzzle = puzzle_for_coin(fee_coin)
-            fee_coin_spend = CoinSpend(fee_coin, fee_coin_puzzle, solution)
+            fee_coin_spend = make_spend(fee_coin, fee_coin_puzzle, solution)
             spends.append(fee_coin_spend)
 
         spend_bundle = await sign_coin_spends(spends, wallet_keyf,
@@ -608,7 +609,7 @@ class Fusion:
             inner_solution,
         )
 
-        singleton_claim_coinsol: CoinSpend = CoinSpend(
+        singleton_claim_coinsol: CoinSpend = make_spend(
             singleton_child,
             SerializedProgram.from_program(full_puzzle),
             SerializedProgram.from_program(full_solution)
@@ -783,8 +784,9 @@ class Fusion:
 
         # tell the fusion.py we are pulling coins out from under it
         # this could include NFT minting, DID creation, change handling
-        coin_solutions = res.get("spend_bundle").get("coin_solutions")
-        for solution in coin_solutions:
+
+        coin_spends = res.get("spend_bundle").get("coin_spends")
+        for solution in coin_spends:
             coin = solution.get("coin")
             if coin:
                 parent_info = bytes32.from_hexstr(coin.get("parent_coin_info"))
