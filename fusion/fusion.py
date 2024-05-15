@@ -87,7 +87,7 @@ DERIVATIONS = int(os.environ.get('DERIVATIONS', 1000))
 
 SINGLETON_INNER: Program = load_clvm("fusion_singleton.clsp", package_or_requirement="clsp", recompile=True)
 
-CHIP21_HINT: bytes32 = bytes32.from_hexstr("0x0a8d35c54b18e9be24a1aebc49497ebc53d33c6b875d7e2c984cbe35185b5a7f")
+CHIP21_HINT: bytes32 = bytes32.from_hexstr("0x83241157e6b396cc2b428b8ad47b113de88a23a91eeed5430f086f36cc0385c9")
 
 config = load_config(DEFAULT_ROOT_PATH, "config.yaml")
 self_hostname = "localhost"
