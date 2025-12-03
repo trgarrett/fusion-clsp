@@ -34,9 +34,9 @@ from chia.wallet.lineage_proof import LineageProof
 from chia.wallet.nft_wallet.nft_info import NFTInfo
 from chia.wallet.nft_wallet.nft_puzzles import (
     NFT_METADATA_UPDATER,
-    NFT_OWNERSHIP_LAYER_HASH, 
+    NFT_OWNERSHIP_LAYER_HASH,
     NFT_STATE_LAYER_MOD_HASH,
-    create_full_puzzle_with_nft_puzzle, 
+    create_full_puzzle_with_nft_puzzle,
     create_nft_layer_puzzle_with_curry_params,
     create_ownership_layer_puzzle
 )
@@ -96,7 +96,7 @@ wallet_rpc_port = config["wallet"]["rpc_port"] # 9256
 
 agg_sig_config = None
 
-TESTNET = os.environ.get("TESTNET", "testnet10")
+TESTNET = os.environ.get("TESTNET", "testnet11")
 
 if PREFIX == 'txch':
     try:
@@ -116,6 +116,7 @@ puzzle_reveals = {}
 # track coins spent recently to make sure they are not re-selected during pending block confirmations
 recent_coins: deque = deque([], 1000)
 
+recent_coins.clear()
 
 class Fusion:
 
@@ -145,10 +146,10 @@ class Fusion:
         logger.info(f"Loading private key for spend bundle signing (fee support and private spends), fingerprint {fingerprint}")
         logger.info(f'Is keychain locked? {Keychain.is_keyring_locked()}')
         keychain = Keychain()
-        
+
         sk = keychain.get_private_key_by_fingerprint(fingerprint)
         assert sk is not None
-        
+
         logger.info(f'Deriving {DERIVATIONS} synthetic private keys')
         for i in range(DERIVATIONS):
             wk1 = master_sk_to_wallet_sk_unhardened(sk[0], i)
@@ -162,14 +163,14 @@ class Fusion:
             puzzle = puzzle_for_pk(pk)
             puzzle_reveals[puzzle.get_tree_hash()] = puzzle
 
-        # TODO - could have a more elaborate default public key selection flow 
+        # TODO - could have a more elaborate default public key selection flow
         # -- this assumes the first key found is always used for PUBKEY_A
         wallet_key = wallet_keys[0]
 
 
     async def create_singleton_launcher(self, fee_amount: int=1000) -> Coin:
         amount = uint64(SINGLETON_AMOUNT + fee_amount)
-    
+
         logger.info('Creating singleton launcher...')
         coins: List[Coin] = await select_coins(self.wallet_client, amount)
 
@@ -191,7 +192,7 @@ class Fusion:
             logger.info("NFT(s) B: ")
             for id in nft_b_launcher_ids:
                 logger.info(encode_puzzle_hash(id, "nft"))
-            
+
             full_puzzle: Program = puzzle_for_singleton(launcher_coin.name(), inner_puzzle)
             puzzle_hash = full_puzzle.get_tree_hash()
 
@@ -259,7 +260,7 @@ class Fusion:
     def pay_to_singleton_puzzle(self, launcher_id: bytes32) -> Program:
         p2_curried: Program = P2_MOD.curry(SINGLETON_MOD_HASH, launcher_id, SINGLETON_LAUNCHER_HASH)
         return p2_curried
-    
+
 
     async def nft_singleton_inner_puzzle_for_p2_puzzle(self, nft_launcher_id: bytes32, inner_puzzle: Program) -> Program:
         nft_coin_record: CoinRecord = await self.node_client.get_coin_record_by_name(nft_launcher_id)
@@ -269,7 +270,7 @@ class Fusion:
         puzzle_and_solution: CoinSpend = await self.node_client.get_puzzle_and_solution(coin_id=coin_record.coin.parent_coin_info, height=parent_coin_record.spent_block_index)
         return await self.nft_singleton_inner_puzzle_for_p2_puzzle_and_spend(puzzle_and_solution, inner_puzzle)
 
-    
+
     async def nft_singleton_inner_puzzle_for_p2_puzzle_and_spend(self, coin_spend: CoinSpend, inner_puzzle: Program) -> Program:
         parent_puzzle_reveal = coin_spend.puzzle_reveal
         nft_program = Program.from_bytes(bytes(parent_puzzle_reveal))
@@ -278,7 +279,7 @@ class Fusion:
         nft_inner_puzzle: Program = await self.nft_inner_puzzle_from_spend(coin_spend, inner_puzzle)
         nft_singleton_inner_puzzle = create_nft_layer_puzzle_with_curry_params(unft.metadata, unft.metadata_updater_hash, nft_inner_puzzle)
         return nft_singleton_inner_puzzle
-    
+
 
     async def full_puzzle_for_p2_puzzle(self, nft_launcher_id: bytes32, inner_puzzle: Program):
         full_puzzle = create_full_puzzle_with_nft_puzzle(nft_launcher_id, await(self.nft_singleton_inner_puzzle_for_p2_puzzle(nft_launcher_id, inner_puzzle)))
@@ -365,8 +366,8 @@ class Fusion:
             singleton_solution = Program.to([lineage_proof.to_program(), 1, nft_layer_solution])
             coin_spend = make_spend(coin_record.coin, full_puzzle, singleton_solution)
 
-            nft_spend_bundle = await sign_coin_spends([coin_spend], wallet_keyf, 
-                                    self.get_synthetic_private_key_for_puzzle_hash, 
+            nft_spend_bundle = await sign_coin_spends([coin_spend], wallet_keyf,
+                                    self.get_synthetic_private_key_for_puzzle_hash,
                                     AGG_SIG_ME_ADDITIONAL_DATA, MAX_BLOCK_COST_CLVM, [puzzle_hash_for_synthetic_public_key])
 
             if logger.isEnabledFor(logging.DEBUG):
@@ -411,7 +412,7 @@ class Fusion:
             full_puzzle = create_full_puzzle_with_nft_puzzle(nft_launcher_id, nft_singleton_inner_puzzle)
             logger.info(f"Preparing p2 spend for NFT at {full_puzzle.get_tree_hash()}")
             assert full_puzzle.get_tree_hash().hex() == coin_record.coin.puzzle_hash.hex()
-    
+
             logger.debug(f"Singleton inner puzzle hash: {nft_singleton_inner_puzzle.get_tree_hash()}")
 
             p2_solution = Program.to([singleton_inner_puzzle.get_tree_hash(), singleton_coin_id, nft_launcher_id,
@@ -483,7 +484,7 @@ class Fusion:
             coins: List[Coin] = await select_coins(self.wallet_client, fee_amount)
             fee_coin: Coin = coins[0]
             change_puzzlehash = fee_coin.puzzle_hash
-            
+
             primaries = []
             primaries.append(Payment(change_puzzlehash, coins[0].amount - fee_amount, change_puzzlehash))
 
@@ -515,7 +516,7 @@ class Fusion:
         for a_launcher_id in a_launcher_ids:
             a_coin_id = (await self.find_unspent_descendant(await self.node_client.get_coin_record_by_name(a_launcher_id))).coin.name()
             release_coin_ids.append(a_coin_id)
-            
+
         lock_coin_ids: List[bytes32] = []
         for b_launcher_id in b_launcher_ids:
             b_coin_id = (await self.find_unspent_descendant(await self.node_client.get_coin_record_by_name(b_launcher_id))).coin.name()
@@ -548,7 +549,7 @@ class Fusion:
         for b_launcher_id in b_launcher_ids:
             b_coin_id = (await self.find_unspent_descendant(await self.node_client.get_coin_record_by_name(b_launcher_id))).coin.name()
             release_coin_ids.append(b_coin_id)
-            
+
         lock_coin_ids: List[bytes32] = []
         for a_launcher_id in a_launcher_ids:
             a_coin_id = (await self.find_unspent_descendant(await self.node_client.get_coin_record_by_name(a_launcher_id))).coin.name()
@@ -568,7 +569,7 @@ class Fusion:
                                                                release_coin_ids, b_launcher_ids, nft_next_puzzlehashes, False, nonce))
         spend_bundle = SpendBundle.aggregate(spend_bundles)
         return spend_bundle
-    
+
 
     # singleton spend
     async def make_swap_spend_bundle(self, singleton_launcher_id, singleton_inner_puzzle,
@@ -650,12 +651,12 @@ class Fusion:
 
         if target_inner_puzzlehash is not None:
             details.append(target_inner_puzzlehash)
-        
+
         logger.debug(f"puzzleshash at OFFER_MOD: {(await self.full_puzzle_for_p2_puzzle(launcher_id, OFFER_MOD)).get_tree_hash()}")
 
         return details
 
- 
+
     async def find_unspent_descendant(self, coin_record: CoinRecord) -> CoinRecord:
         if not coin_record.spent:
             return coin_record
@@ -664,14 +665,14 @@ class Fusion:
         if not child.spent:
             return child
         return await self.find_unspent_descendant(child)
-    
+
 
     async def cli_deploy_singleton(self, nft_a_ids: str, nft_b_ids: str, fee_amount:int=1000) -> bytes32:
         logger.info(f"CLI: deploy singleton for NFT(s) A: [{nft_a_ids}] ; B: [{nft_b_ids}]")
 
         a_as_str_arr: List[str] = nft_a_ids.split(',')
         b_as_str_arr: List[str] = nft_b_ids.split(',')
-        
+
         nft_a_launcher_ids: List[bytes32] = []
         nft_b_launcher_ids: List[bytes32] = []
 
@@ -707,7 +708,7 @@ class Fusion:
         logger.info("Check deployed singleton...")
         logger.info(f"    launcher_id: {launcher_id_bytes.hex()}")
         logger.info(f"    p2_singleton_address: {encode_puzzle_hash(self.pay_to_singleton_puzzle(launcher_id_bytes).get_tree_hash(), PREFIX)}")
-        
+
         logger.info("NFT(s) A:")
         for a in launchers_a:
             logger.info("\t" + encode_puzzle_hash(a, "nft"))
@@ -799,7 +800,7 @@ class Fusion:
         logger.info(f" {nft_id} -> {launcher_id}")
         return launcher_id
 
-    
+
     async def get_nft_launcher_ids_from_extra_data(self, launcher_id: bytes32):
         launcher_coin_record = await self.node_client.get_coin_record_by_name(launcher_id)
         launcher_coin_spend: CoinSpend = await self.node_client.get_puzzle_and_solution(launcher_coin_record.coin.name(), launcher_coin_record.spent_block_index)
@@ -825,7 +826,7 @@ class Fusion:
             payload["fee"] = fee
 
         return json.dumps(payload)
-    
+
 
     # a_or_b 'a'|'b' - which one is being requested
     # returns - tuple of offer_dict, driver_dict
@@ -848,7 +849,7 @@ class Fusion:
             driver_dict.update(b_driver)
 
         return offer_dict, driver_dict
-    
+
 
     async def get_driver_dict(self, coin_id: bytes32) -> Dict:
         driver_dict = {}
@@ -924,7 +925,7 @@ class Fusion:
                 logger.debug(f"Offer memos: {Program.to(p.memos)}")
 
         logger.debug(f"Offer nonce: {nonce.hex()}")
-        
+
         logger.debug(f"Offer driver_dict: {offer.driver_dict}")
 
         logger.debug(f"Offer requested_payments: {offer.requested_payments}")
@@ -938,7 +939,7 @@ class Fusion:
 
         logger.debug("User offer requests:")
         for asset_id, payment in offer.requested_payments.items():
-            logger.debug(f"asset_id: {asset_id}, payment: {payment}") 
+            logger.debug(f"asset_id: {asset_id}, payment: {payment}")
 
         user_offer_spend_bundle = self.to_spend_bundle(offer)
 
@@ -973,7 +974,7 @@ class Fusion:
 
         launcher_coin_record: CoinRecord = await self.node_client.get_coin_record_by_name(launcher_id)
         singleton_coin_record: CoinRecord = await self.find_unspent_descendant(launcher_coin_record)
-        
+
         singleton_struct = (SINGLETON_MOD_HASH, (launcher_id, SINGLETON_LAUNCHER_HASH))
         singleton_inner_puzzle: Program = SINGLETON_INNER.curry(singleton_struct, p2_singleton.get_tree_hash(),
                                                                 OFFER_MOD_HASH, NFT_STATE_LAYER_MOD_HASH, NFT_OWNERSHIP_LAYER_HASH, NFT_METADATA_UPDATER_PUZZLE_HASH_HASH,
@@ -1036,7 +1037,6 @@ async def select_coins(wallet_client: WalletRpcClient, amount: uint64):
     excluded_coin_ids = [c.name() for c in recent_coins]
     coin_selection_config = CoinSelectionConfig(min_coin_amount=1, max_coin_amount=MAX_COIN_AMOUNT, excluded_coin_amounts=[], excluded_coin_ids=excluded_coin_ids)
     coins: List[Coin] = await wallet_client.select_coins(amount=amount, wallet_id=1, coin_selection_config=coin_selection_config)
-    logger.info(f'Selecting coins, will exclude {len(excluded_coin_ids)} coins recently spent')
     assert len(coins) >= 1
     logger.info(f'Selected {len(coins)} coins')
     for coin in coins:
